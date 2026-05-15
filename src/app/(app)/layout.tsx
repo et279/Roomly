@@ -26,7 +26,7 @@ export default async function AppLayout({
   if (!member) redirect("/create-home");
 
   return (
-    <div className="pb-16">
+    <div className="pb-28">
       {children}
       <BottomNav />
     </div>
