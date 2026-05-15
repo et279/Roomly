@@ -26,7 +26,9 @@ export default async function AppLayout({
   if (!member) redirect("/create-home");
 
   return (
-    <div className="pb-28">
+    <div
+      style={{ paddingBottom: "calc(7rem + env(safe-area-inset-bottom))" }}
+    >
       {children}
       <BottomNav />
     </div>

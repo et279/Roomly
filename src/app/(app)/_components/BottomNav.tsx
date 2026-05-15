@@ -16,7 +16,10 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center px-4 pb-5">
+    <div
+      className="fixed bottom-0 left-0 right-0 z-50 flex justify-center px-4"
+      style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+    >
       <nav
         className="w-full max-w-md rounded-2xl border bg-card/90 backdrop-blur-xl px-2 py-2"
         style={{

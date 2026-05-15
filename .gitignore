@@ -35,6 +35,13 @@ Thumbs.db
 *.tsbuildinfo
 next-env.d.ts
 
-# Capacitor
-android/
-ios/
+# Capacitor — track native project, ignore build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/google-services.json
+ios/Pods/
+ios/build/
+*.keystore
+*.jks
