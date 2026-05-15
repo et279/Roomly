@@ -43,7 +43,7 @@ export default async function DashboardPage() {
   ] = await Promise.all([
     admin
       .from("tasks")
-      .select("id, title, done, assigned_to, created_by, created_at, home_id, completed_by")
+      .select("id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at")
       .eq("home_id", homeId)
       .order("created_at", { ascending: false }),
     admin.from("profiles").select("id, name").in("id", memberIds),
@@ -58,9 +58,16 @@ export default async function DashboardPage() {
     .slice(0, 5)
     .map((t) => ({
       ...t,
+      completed_by: t.completed_by ?? null,
+      completed_at: t.completed_at ?? null,
+      due_date: t.due_date ?? null,
+      original_assigned_to: t.original_assigned_to ?? null,
+      assignee_changed_by: t.assignee_changed_by ?? null,
+      assignee_changed_at: t.assignee_changed_at ?? null,
       profiles: t.assigned_to
         ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
         : null,
+      completed_by_profile: null,
     }));
 
   const tasksDoneCount = (tasks ?? []).filter((t) => t.done).length;
@@ -84,7 +91,7 @@ export default async function DashboardPage() {
     <DashboardContent
       userName={profile?.name ?? ""}
       homeName={homeName}
-      pendingTasks={pendingTasks as unknown as TaskWithAssignee[]}
+      pendingTasks={pendingTasks as TaskWithAssignee[]}
       tasksDoneCount={tasksDoneCount}
       tasksPendingCount={tasksPendingCount}
       shoppingPendingCount={shoppingPendingCount}

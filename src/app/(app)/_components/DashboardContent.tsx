@@ -1,10 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ListTodo, ShoppingCart, Trophy, ChevronRight, ArrowRight } from "lucide-react";
+import {
+  ListTodo,
+  ShoppingCart,
+  Trophy,
+  ChevronRight,
+  ArrowRight,
+  Circle,
+  CheckCircle2,
+  Calendar,
+} from "lucide-react";
 import type { TaskWithAssignee, MemberStat } from "@/types";
 import { motion } from "framer-motion";
 import InviteModal from "./InviteModal";
+import { useState, useTransition } from "react";
+import { toggleTask } from "@/lib/actions/tasks";
 
 type Props = {
   userName: string;
@@ -32,6 +43,14 @@ const fadeUp = {
   },
 };
 
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return null;
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 export default function DashboardContent({
   userName,
   homeName,
@@ -45,6 +64,17 @@ export default function DashboardContent({
 }: Props) {
   const sortedMembers = [...memberStats].sort((a, b) => b.done - a.done);
   const firstName = userName.split(" ")[0];
+
+  // Keep a stable list for this session — done tasks get crossed out but stay until reload
+  const [displayTasks, setDisplayTasks] = useState(pendingTasks);
+  const [, startTransition] = useTransition();
+
+  function handleToggle(id: string) {
+    setDisplayTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: true } : t)),
+    );
+    startTransition(() => toggleTask(id, true));
+  }
 
   return (
     <main className="min-h-screen bg-background">
@@ -61,7 +91,10 @@ export default function DashboardContent({
               {homeName}
             </p>
             <InviteModal
-              members={memberStats.map((m) => ({ user_id: m.user_id, name: m.name }))}
+              members={memberStats.map((m) => ({
+                user_id: m.user_id,
+                name: m.name,
+              }))}
               isAdmin={isAdmin}
               currentUserId={currentUserId}
             />
@@ -124,7 +157,7 @@ export default function DashboardContent({
             </Link>
           </div>
 
-          {pendingTasks.length === 0 ? (
+          {displayTasks.length === 0 ? (
             <EmptyTasksCard />
           ) : (
             <motion.ul
@@ -133,21 +166,62 @@ export default function DashboardContent({
               animate="show"
               className="space-y-1.5"
             >
-              {pendingTasks.map((task) => (
+              {displayTasks.map((task) => (
                 <motion.li
                   key={task.id}
                   variants={fadeUp}
-                  className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-3 card-shadow"
+                  className={`flex items-center gap-3 rounded-2xl border bg-card px-4 py-3 card-shadow transition-opacity duration-300 ${
+                    task.done ? "opacity-50" : ""
+                  }`}
                 >
-                  <span className="h-[18px] w-[18px] shrink-0 rounded-full border-[1.75px] border-border" />
-                  <span className="flex-1 text-sm font-medium leading-snug">
-                    {task.title}
-                  </span>
-                  {task.profiles && (
-                    <span className="shrink-0 text-muted-foreground text-xs">
-                      {task.profiles.name}
+                  {/* Toggle button */}
+                  <motion.button
+                    onClick={() => !task.done && handleToggle(task.id)}
+                    whileTap={!task.done ? { scale: 0.78 } : {}}
+                    transition={{ type: "spring", stiffness: 500, damping: 22 }}
+                    className="shrink-0"
+                    aria-label={task.done ? "Hecha" : "Marcar como hecha"}
+                  >
+                    {task.done ? (
+                      <CheckCircle2
+                        size={18}
+                        className="text-foreground"
+                        strokeWidth={2}
+                      />
+                    ) : (
+                      <Circle
+                        size={18}
+                        className="text-border"
+                        strokeWidth={1.75}
+                      />
+                    )}
+                  </motion.button>
+
+                  <div className="flex-1 min-w-0">
+                    <span
+                      className={`text-sm font-medium leading-snug block transition-all duration-200 ${
+                        task.done
+                          ? "line-through text-muted-foreground"
+                          : ""
+                      }`}
+                    >
+                      {task.title}
                     </span>
-                  )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {task.profiles && (
+                        <span className="text-muted-foreground text-xs">
+                          {task.profiles.name}
+                          {task.assigned_to === currentUserId ? " · vos" : ""}
+                        </span>
+                      )}
+                      {task.due_date && (
+                        <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                          <Calendar size={10} strokeWidth={2} />
+                          {formatDate(task.due_date)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </motion.li>
               ))}
               {tasksPendingCount > 5 && (
@@ -170,7 +244,11 @@ export default function DashboardContent({
           <motion.section
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: 0.26, ease: "easeOut" as const }}
+            transition={{
+              duration: 0.25,
+              delay: 0.26,
+              ease: "easeOut" as const,
+            }}
             className="space-y-3"
           >
             <h2 className="font-semibold text-[15px] tracking-tight flex items-center gap-1.5">
@@ -192,7 +270,9 @@ export default function DashboardContent({
                   </span>
                   <span className="flex-1 text-sm font-medium">{m.name}</span>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span className="font-semibold text-foreground">{m.done}</span>
+                    <span className="font-semibold text-foreground">
+                      {m.done}
+                    </span>
                     <span>hechas</span>
                     {m.pending > 0 && (
                       <>
@@ -240,7 +320,9 @@ function StatCard({
         <div className={accent ? "text-background/55" : "text-muted-foreground"}>
           {icon}
         </div>
-        <p className="text-[1.6rem] font-bold leading-none tracking-tight">{value}</p>
+        <p className="text-[1.6rem] font-bold leading-none tracking-tight">
+          {value}
+        </p>
         <p
           className={`text-[10px] font-medium leading-tight ${
             accent ? "text-background/65" : "text-muted-foreground"

@@ -31,13 +31,12 @@ export default async function TasksPage() {
   const [{ data: tasks }, { data: memberProfiles }] = await Promise.all([
     admin
       .from("tasks")
-      .select("id, title, done, assigned_to, created_by, created_at, home_id")
+      .select(
+        "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at",
+      )
       .eq("home_id", membership.home_id)
       .order("created_at", { ascending: false }),
-    admin
-      .from("profiles")
-      .select("id, name")
-      .in("id", memberIds),
+    admin.from("profiles").select("id, name").in("id", memberIds),
   ]);
 
   const members = (memberRows ?? []).map((m) => ({
@@ -46,16 +45,25 @@ export default async function TasksPage() {
       (memberProfiles ?? []).find((p) => p.id === m.user_id) ?? null,
   }));
 
-  const tasksWithAssignee = (tasks ?? []).map((t) => ({
+  const tasksWithAssignee: TaskWithAssignee[] = (tasks ?? []).map((t) => ({
     ...t,
+    completed_by: t.completed_by ?? null,
+    completed_at: t.completed_at ?? null,
+    due_date: t.due_date ?? null,
+    original_assigned_to: t.original_assigned_to ?? null,
+    assignee_changed_by: t.assignee_changed_by ?? null,
+    assignee_changed_at: t.assignee_changed_at ?? null,
     profiles: t.assigned_to
       ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
+      : null,
+    completed_by_profile: t.completed_by
+      ? ((memberProfiles ?? []).find((p) => p.id === t.completed_by) ?? null)
       : null,
   }));
 
   return (
     <TaskList
-      tasks={tasksWithAssignee as unknown as TaskWithAssignee[]}
+      tasks={tasksWithAssignee}
       members={members}
       currentUserId={user.id}
     />

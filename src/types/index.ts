@@ -41,10 +41,17 @@ export type Task = {
   done: boolean;
   created_by: string;
   created_at: string;
+  completed_by: string | null;
+  completed_at: string | null;
+  due_date: string | null;
+  original_assigned_to: string | null;
+  assignee_changed_by: string | null;
+  assignee_changed_at: string | null;
 };
 
 export type TaskWithAssignee = Task & {
   profiles: { name: string } | null;
+  completed_by_profile?: { name: string } | null;
 };
 
 export type ShoppingItem = {
