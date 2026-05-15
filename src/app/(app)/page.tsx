@@ -17,15 +17,15 @@ export default async function DashboardPage() {
     admin.from("profiles").select("name").eq("id", user.id).single(),
     admin
       .from("home_members")
-      .select("home_id, homes(name)")
+      .select("home_id, homes(name, created_by)")
       .eq("user_id", user.id)
       .single(),
   ]);
 
   const homeId = membership?.home_id;
-  const homeName =
-    (membership?.homes as unknown as { name: string } | null)?.name ??
-    "Mi hogar";
+  const homeData = membership?.homes as unknown as { name: string; created_by: string } | null;
+  const homeName = homeData?.name ?? "Mi hogar";
+  const isAdmin = homeData?.created_by === user.id;
 
   if (!homeId) redirect("/create-home");
 
@@ -89,6 +89,8 @@ export default async function DashboardPage() {
       tasksPendingCount={tasksPendingCount}
       shoppingPendingCount={shoppingPendingCount}
       memberStats={memberStats}
+      isAdmin={isAdmin}
+      currentUserId={user.id}
     />
   );
 }

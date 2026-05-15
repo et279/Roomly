@@ -16,6 +16,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=expired_link`);
   }
 
+  // Check for invite link token cookie (shareable link flow)
+  const inviteToken = request.cookies.get("roomly_invite")?.value;
+  if (inviteToken) {
+    const { data: inviteLink } = await supabase
+      .from("invite_links")
+      .select("home_id, expires_at")
+      .eq("token", inviteToken)
+      .single();
+
+    if (inviteLink && new Date(inviteLink.expires_at) > new Date()) {
+      await supabase
+        .from("home_members")
+        .insert({ home_id: inviteLink.home_id, user_id: data.user.id });
+      const res = NextResponse.redirect(`${origin}/`);
+      res.cookies.delete("roomly_invite");
+      return res;
+    }
+  }
+
+  // Check for email-based invitation
   const pendingInvite = await supabase
     .from("invitations")
     .select("home_id")

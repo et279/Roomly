@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ListTodo, ShoppingCart, Trophy, ChevronRight, ArrowRight } from "lucide-react";
 import type { TaskWithAssignee, MemberStat } from "@/types";
 import { motion } from "framer-motion";
+import InviteModal from "./InviteModal";
 
 type Props = {
   userName: string;
@@ -13,6 +14,8 @@ type Props = {
   tasksPendingCount: number;
   shoppingPendingCount: number;
   memberStats: MemberStat[];
+  isAdmin: boolean;
+  currentUserId: string;
 };
 
 const stagger = {
@@ -37,6 +40,8 @@ export default function DashboardContent({
   tasksPendingCount,
   shoppingPendingCount,
   memberStats,
+  isAdmin,
+  currentUserId,
 }: Props) {
   const sortedMembers = [...memberStats].sort((a, b) => b.done - a.done);
   const firstName = userName.split(" ")[0];
@@ -51,9 +56,16 @@ export default function DashboardContent({
           transition={{ duration: 0.3, ease: "easeOut" as const }}
           className="space-y-0.5"
         >
-          <p className="text-sm font-medium text-muted-foreground tracking-wide">
-            {homeName}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-muted-foreground tracking-wide">
+              {homeName}
+            </p>
+            <InviteModal
+              members={memberStats.map((m) => ({ user_id: m.user_id, name: m.name }))}
+              isAdmin={isAdmin}
+              currentUserId={currentUserId}
+            />
+          </div>
           <h1 className="text-[2rem] font-bold tracking-tight leading-tight">
             Hola, {firstName} 👋
           </h1>

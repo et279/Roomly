@@ -32,8 +32,9 @@ export async function middleware(request: NextRequest) {
   const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
   const isOnboarding = pathname.startsWith("/create-home") || pathname.startsWith("/invite");
   const isAuthCallback = pathname.startsWith("/auth/");
+  const isJoinRoute = pathname.startsWith("/join/");
 
-  if (isAuthCallback) return response;
+  if (isAuthCallback || isJoinRoute) return response;
 
   if (!user && !isAuthPage) {
     return NextResponse.redirect(new URL("/login", request.url));

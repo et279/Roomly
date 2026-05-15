@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -86,6 +87,80 @@ export async function inviteMember(_: unknown, formData: FormData) {
   if (error) return { error: "Error al enviar la invitación" };
 
   return { success: true, email };
+}
+
+export async function createInviteLink(_: unknown, _formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  const admin = createAdminClient();
+
+  const { data: membership } = await admin
+    .from("home_members")
+    .select("home_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) return { error: "No pertenecés a ningún hogar" };
+
+  const token = crypto.randomUUID();
+
+  const { error } = await admin.from("invite_links").insert({
+    home_id: membership.home_id,
+    created_by: user.id,
+    token,
+  });
+
+  if (error) return { error: "Error al generar el enlace" };
+
+  return { success: true, token };
+}
+
+export async function removeMember(memberUserId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const admin = createAdminClient();
+
+  const { data: membership } = await admin
+    .from("home_members")
+    .select("home_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!membership) return { error: "No pertenecés a ningún hogar" };
+
+  const { data: home } = await admin
+    .from("homes")
+    .select("created_by")
+    .eq("id", membership.home_id)
+    .single();
+
+  if (!home || home.created_by !== user.id) {
+    return { error: "Solo el administrador puede eliminar miembros" };
+  }
+
+  if (memberUserId === user.id) {
+    return { error: "No podés eliminarte a vos mismo" };
+  }
+
+  const { error } = await admin
+    .from("home_members")
+    .delete()
+    .eq("home_id", membership.home_id)
+    .eq("user_id", memberUserId);
+
+  if (error) return { error: "Error al eliminar el miembro" };
+
+  revalidatePath("/");
+  return { success: true };
 }
 
 export async function getCurrentHome(userId: string) {
