@@ -46,3 +46,24 @@ export type Task = {
 export type TaskWithAssignee = Task & {
   profiles: { name: string } | null;
 };
+
+export type ShoppingItem = {
+  id: string;
+  home_id: string;
+  title: string;
+  quantity: string | null;
+  added_by: string | null;
+  done: boolean;
+  created_at: string;
+};
+
+export type ShoppingItemWithAdder = ShoppingItem & {
+  profiles: { name: string } | null;
+};
+
+export type MemberStat = {
+  user_id: string;
+  name: string;
+  pending: number;
+  done: number;
+};

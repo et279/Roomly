@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardContent from "./_components/DashboardContent";
-import type { TaskWithAssignee } from "@/types";
+import type { TaskWithAssignee, MemberStat } from "@/types";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -27,37 +27,68 @@ export default async function DashboardPage() {
     (membership?.homes as unknown as { name: string } | null)?.name ??
     "Mi hogar";
 
-  const { data: tasks } = homeId
-    ? await admin
-        .from("tasks")
-        .select("id, title, done, assigned_to, created_by, created_at, home_id")
-        .eq("home_id", homeId)
-        .eq("done", false)
-        .order("created_at", { ascending: false })
-        .limit(5)
-    : { data: [] };
+  if (!homeId) redirect("/create-home");
 
-  const assigneeIds = (tasks ?? [])
-    .map((t) => t.assigned_to)
-    .filter(Boolean) as string[];
+  const { data: memberRows } = await admin
+    .from("home_members")
+    .select("user_id")
+    .eq("home_id", homeId);
 
-  const { data: assigneeProfiles } =
-    assigneeIds.length > 0
-      ? await admin.from("profiles").select("id, name").in("id", assigneeIds)
-      : { data: [] };
+  const memberIds = (memberRows ?? []).map((m) => m.user_id);
 
-  const pendingTasks = (tasks ?? []).map((t) => ({
-    ...t,
-    profiles: t.assigned_to
-      ? ((assigneeProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
-      : null,
-  }));
+  const [
+    { data: tasks },
+    { data: memberProfiles },
+    { data: shoppingItems },
+  ] = await Promise.all([
+    admin
+      .from("tasks")
+      .select("id, title, done, assigned_to, created_by, created_at, home_id, completed_by")
+      .eq("home_id", homeId)
+      .order("created_at", { ascending: false }),
+    admin.from("profiles").select("id, name").in("id", memberIds),
+    admin
+      .from("shopping_items")
+      .select("id, done")
+      .eq("home_id", homeId),
+  ]);
+
+  const pendingTasks = (tasks ?? [])
+    .filter((t) => !t.done)
+    .slice(0, 5)
+    .map((t) => ({
+      ...t,
+      profiles: t.assigned_to
+        ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
+        : null,
+    }));
+
+  const tasksDoneCount = (tasks ?? []).filter((t) => t.done).length;
+  const tasksPendingCount = (tasks ?? []).filter((t) => !t.done).length;
+  const shoppingPendingCount = (shoppingItems ?? []).filter((i) => !i.done).length;
+
+  // Member leaderboard: tasks done per member
+  const memberStats: MemberStat[] = (memberProfiles ?? []).map((p) => {
+    const memberTasks = (tasks ?? []).filter(
+      (t) => t.completed_by === p.id || t.assigned_to === p.id
+    );
+    return {
+      user_id: p.id,
+      name: p.name,
+      pending: memberTasks.filter((t) => !t.done).length,
+      done: (tasks ?? []).filter((t) => t.completed_by === p.id).length,
+    };
+  });
 
   return (
     <DashboardContent
       userName={profile?.name ?? ""}
       homeName={homeName}
       pendingTasks={pendingTasks as unknown as TaskWithAssignee[]}
+      tasksDoneCount={tasksDoneCount}
+      tasksPendingCount={tasksPendingCount}
+      shoppingPendingCount={shoppingPendingCount}
+      memberStats={memberStats}
     />
   );
 }

@@ -22,46 +22,39 @@ async function getUserAndHome() {
   return { user, homeId: membership?.home_id ?? null, admin };
 }
 
-export async function createTask(_: unknown, formData: FormData) {
+export async function createShoppingItem(_: unknown, formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
-  const assignedTo = formData.get("assigned_to") as string | null;
+  const quantity = (formData.get("quantity") as string)?.trim() || null;
 
-  if (!title) return { error: "El título no puede estar vacío" };
+  if (!title) return { error: "El nombre no puede estar vacío" };
 
   const { user, homeId, admin } = await getUserAndHome();
   if (!homeId) return { error: "No pertenecés a ningún hogar" };
 
-  const { error } = await admin.from("tasks").insert({
+  const { error } = await admin.from("shopping_items").insert({
     home_id: homeId,
     title,
-    assigned_to: assignedTo || null,
-    created_by: user.id,
+    quantity,
+    added_by: user.id,
   });
 
   if (error) return { error: error.message };
 
-  revalidatePath("/tasks");
+  revalidatePath("/shopping");
   revalidatePath("/");
-  return { success: true };
+  return { error: null };
 }
 
-export async function toggleTask(id: string, done: boolean) {
-  const { user, admin } = await getUserAndHome();
-  await admin
-    .from("tasks")
-    .update({
-      done,
-      completed_by: done ? user.id : null,
-      completed_at: done ? new Date().toISOString() : null,
-    })
-    .eq("id", id);
-  revalidatePath("/tasks");
-  revalidatePath("/");
-}
-
-export async function deleteTask(id: string) {
+export async function toggleShoppingItem(id: string, done: boolean) {
   const { admin } = await getUserAndHome();
-  await admin.from("tasks").delete().eq("id", id);
-  revalidatePath("/tasks");
+  await admin.from("shopping_items").update({ done }).eq("id", id);
+  revalidatePath("/shopping");
+  revalidatePath("/");
+}
+
+export async function deleteShoppingItem(id: string) {
+  const { admin } = await getUserAndHome();
+  await admin.from("shopping_items").delete().eq("id", id);
+  revalidatePath("/shopping");
   revalidatePath("/");
 }

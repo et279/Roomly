@@ -1,19 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import type { TaskWithAssignee } from "@/types";
+import { ListTodo, ShoppingCart, Trophy } from "lucide-react";
+import type { TaskWithAssignee, MemberStat } from "@/types";
 
 type Props = {
   userName: string;
   homeName: string;
   pendingTasks: TaskWithAssignee[];
+  tasksDoneCount: number;
+  tasksPendingCount: number;
+  shoppingPendingCount: number;
+  memberStats: MemberStat[];
 };
 
 export default function DashboardContent({
   userName,
   homeName,
   pendingTasks,
+  tasksDoneCount,
+  tasksPendingCount,
+  shoppingPendingCount,
+  memberStats,
 }: Props) {
+  const sortedMembers = [...memberStats].sort((a, b) => b.done - a.done);
+
   return (
     <main className="min-h-screen bg-background">
       <div className="mx-auto max-w-md px-4 py-6 space-y-6">
@@ -22,6 +33,30 @@ export default function DashboardContent({
           <p className="text-muted-foreground text-sm">{homeName}</p>
         </header>
 
+        {/* Stats row */}
+        <section className="grid grid-cols-3 gap-3">
+          <StatCard
+            icon={<ListTodo size={16} />}
+            label="Pendientes"
+            value={tasksPendingCount}
+            href="/tasks"
+          />
+          <StatCard
+            icon={<ListTodo size={16} />}
+            label="Hechas"
+            value={tasksDoneCount}
+            href="/tasks"
+            accent
+          />
+          <StatCard
+            icon={<ShoppingCart size={16} />}
+            label="Compras"
+            value={shoppingPendingCount}
+            href="/shopping"
+          />
+        </section>
+
+        {/* Pending tasks preview */}
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold text-lg">Tareas pendientes</h2>
@@ -61,20 +96,80 @@ export default function DashboardContent({
                   )}
                 </li>
               ))}
-              {pendingTasks.length === 5 && (
+              {tasksPendingCount > 5 && (
                 <li>
                   <Link
                     href="/tasks"
                     className="block text-center text-sm text-muted-foreground hover:text-foreground py-2"
                   >
-                    Ver más →
+                    Ver {tasksPendingCount - 5} más →
                   </Link>
                 </li>
               )}
             </ul>
           )}
         </section>
+
+        {/* Member leaderboard */}
+        {sortedMembers.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="font-semibold text-lg flex items-center gap-2">
+              <Trophy size={18} />
+              Actividad del hogar
+            </h2>
+            <ul className="space-y-2">
+              {sortedMembers.map((m, i) => (
+                <li
+                  key={m.user_id}
+                  className="flex items-center gap-3 rounded-xl border bg-card p-3"
+                >
+                  <span className="text-sm font-bold text-muted-foreground w-5 text-center">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-sm font-medium">{m.name}</span>
+                  <div className="flex gap-3 text-xs text-muted-foreground">
+                    <span className="text-foreground font-semibold">
+                      {m.done} hechas
+                    </span>
+                    {m.pending > 0 && <span>{m.pending} pend.</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function StatCard({
+  icon,
+  label,
+  value,
+  href,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  href: string;
+  accent?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`rounded-xl border p-3 space-y-1 block transition-colors hover:bg-muted/50 ${
+        accent ? "bg-foreground text-background border-foreground" : "bg-card"
+      }`}
+    >
+      <div className={accent ? "text-background/70" : "text-muted-foreground"}>
+        {icon}
+      </div>
+      <p className="text-2xl font-bold leading-none">{value}</p>
+      <p className={`text-xs ${accent ? "text-background/80" : "text-muted-foreground"}`}>
+        {label}
+      </p>
+    </Link>
   );
 }
