@@ -1,16 +1,16 @@
 import { create } from "zustand";
-import type { House, HouseMember } from "@/types";
+import type { Home, HomeMember } from "@/types";
 
 type HouseState = {
-  house: House | null;
-  members: HouseMember[];
-  setHouse: (house: House | null) => void;
-  setMembers: (members: HouseMember[]) => void;
+  home: Home | null;
+  members: HomeMember[];
+  setHome: (home: Home | null) => void;
+  setMembers: (members: HomeMember[]) => void;
 };
 
 export const useHouseStore = create<HouseState>((set) => ({
-  house: null,
+  home: null,
   members: [],
-  setHouse: (house) => set({ house }),
+  setHome: (home) => set({ home }),
   setMembers: (members) => set({ members }),
 }));

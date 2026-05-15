@@ -1,4 +1,4 @@
-export type User = {
+export type Profile = {
   id: string;
   email: string;
   name: string;
@@ -6,17 +6,29 @@ export type User = {
   created_at: string;
 };
 
-export type House = {
+export type Home = {
   id: string;
   name: string;
-  invite_code: string;
+  created_by: string;
   created_at: string;
 };
 
-export type HouseMember = {
+export type HomeMember = {
   id: string;
-  house_id: string;
+  home_id: string;
   user_id: string;
-  role: "admin" | "member";
   joined_at: string;
+};
+
+export type Invitation = {
+  id: string;
+  home_id: string;
+  email: string;
+  invited_by: string;
+  status: "pending" | "accepted";
+  created_at: string;
+};
+
+export type HomeWithMembers = Home & {
+  home_members: HomeMember[];
 };
