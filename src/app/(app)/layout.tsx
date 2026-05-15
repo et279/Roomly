@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import BottomNav from "./_components/BottomNav";
 
 export default async function AppLayout({
   children,
@@ -11,19 +12,23 @@ export default async function AppLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
-  const { data: member } = await supabase
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+
+  const { data: member } = await admin
     .from("home_members")
     .select("home_id")
     .eq("user_id", user.id)
     .single();
 
-  if (!member) {
-    redirect("/create-home");
-  }
+  if (!member) redirect("/create-home");
 
-  return <>{children}</>;
+  return (
+    <div className="pb-16">
+      {children}
+      <BottomNav />
+    </div>
+  );
 }

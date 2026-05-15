@@ -32,3 +32,17 @@ export type Invitation = {
 export type HomeWithMembers = Home & {
   home_members: HomeMember[];
 };
+
+export type Task = {
+  id: string;
+  home_id: string;
+  title: string;
+  assigned_to: string | null;
+  done: boolean;
+  created_by: string;
+  created_at: string;
+};
+
+export type TaskWithAssignee = Task & {
+  profiles: { name: string } | null;
+};
