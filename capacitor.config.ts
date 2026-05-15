@@ -8,7 +8,7 @@ const config: CapacitorConfig = {
   // Live-update mode: APK loads from Vercel — no recompile needed for web changes.
   // Replace the URL below with your actual Vercel deployment URL.
   server: {
-    url: "https://roomly.vercel.app",
+    url: "https://roomly-delta.vercel.app",
     cleartext: false,
     allowNavigation: [
       "*.supabase.co",
