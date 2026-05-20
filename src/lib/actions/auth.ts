@@ -151,3 +151,84 @@ export async function signOut() {
   await supabase.auth.signOut();
   redirect("/login");
 }
+
+export async function forgotPassword(_: unknown, formData: FormData) {
+  const email = formData.get("email") as string;
+  if (!email || !z.email().safeParse(email).success) {
+    return { error: "Email inválido" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/confirm?next=/reset-password`,
+  });
+
+  if (error) return { error: "Hubo un error. Intentá de nuevo." };
+  return { success: true };
+}
+
+const resetPasswordSchema = z.object({
+  password: z.string().min(6),
+  confirm: z.string().min(6),
+});
+
+export async function resetPassword(_: unknown, formData: FormData) {
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+  });
+
+  if (!parsed.success) return { error: "La contraseña debe tener al menos 6 caracteres" };
+  if (parsed.data.password !== parsed.data.confirm) return { error: "Las contraseñas no coinciden" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+
+  if (error) return { error: "No se pudo actualizar la contraseña. El link puede haber expirado." };
+  redirect("/");
+}
+
+const updateNameSchema = z.object({
+  name: z.string().min(2),
+});
+
+export async function updateName(_: unknown, formData: FormData) {
+  const parsed = updateNameSchema.safeParse({ name: formData.get("name") });
+  if (!parsed.success) return { error: "El nombre debe tener al menos 2 caracteres" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ name: parsed.data.name })
+    .eq("id", user.id);
+
+  if (error) return { error: "No se pudo actualizar el nombre" };
+
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/profile");
+  return { success: true };
+}
+
+const changePasswordSchema = z.object({
+  password: z.string().min(6),
+  confirm: z.string().min(6),
+});
+
+export async function changePassword(_: unknown, formData: FormData) {
+  const parsed = changePasswordSchema.safeParse({
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+  });
+
+  if (!parsed.success) return { error: "La contraseña debe tener al menos 6 caracteres" };
+  if (parsed.data.password !== parsed.data.confirm) return { error: "Las contraseñas no coinciden" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+
+  if (error) return { error: "No se pudo actualizar la contraseña" };
+  return { success: true };
+}

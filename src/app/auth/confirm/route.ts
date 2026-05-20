@@ -5,6 +5,8 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
 
+  const next = searchParams.get("next");
+
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=invalid_link`);
   }
@@ -14,6 +16,10 @@ export async function GET(request: NextRequest) {
 
   if (error || !data.user) {
     return NextResponse.redirect(`${origin}/login?error=expired_link`);
+  }
+
+  if (next === "/reset-password") {
+    return NextResponse.redirect(`${origin}/reset-password`);
   }
 
   // Check for invite link token cookie (shareable link flow)

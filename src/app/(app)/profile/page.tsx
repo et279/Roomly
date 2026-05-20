@@ -4,6 +4,8 @@ import { signOut } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Home, Mail, LogOut } from "lucide-react";
+import { ChangeNameForm } from "./_components/ChangeNameForm";
+import { ChangePasswordForm } from "./_components/ChangePasswordForm";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -50,8 +52,8 @@ export default async function ProfilePage() {
           <div className="h-20 w-20 rounded-full bg-foreground text-background flex items-center justify-center text-2xl font-bold tracking-tight select-none">
             {initials}
           </div>
-          <div className="text-center">
-            <p className="font-semibold text-lg leading-tight">{name}</p>
+          <div className="flex flex-col items-center gap-0.5">
+            <ChangeNameForm currentName={name} />
             <p className="text-muted-foreground text-sm">{homeName}</p>
           </div>
         </div>
@@ -76,6 +78,9 @@ export default async function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* Seguridad */}
+        <ChangePasswordForm />
 
         {/* Apariencia */}
         <div className="rounded-2xl border bg-card card-shadow overflow-hidden">

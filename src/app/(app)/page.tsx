@@ -54,8 +54,12 @@ export default async function DashboardPage() {
       .eq("home_id", homeId),
   ]);
 
+  // Exclude tasks with a future due_date (e.g. auto-created next occurrences of recurring tasks)
+  const n = new Date();
+  const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+
   const pendingTasks = (tasks ?? [])
-    .filter((t) => !t.done)
+    .filter((t) => !t.done && (!t.due_date || t.due_date <= todayStr))
     .slice(0, 5)
     .map((t) => ({
       ...t,
@@ -72,7 +76,8 @@ export default async function DashboardPage() {
     }));
 
   const tasksDoneCount = (tasks ?? []).filter((t) => t.done).length;
-  const tasksPendingCount = (tasks ?? []).filter((t) => !t.done).length;
+  const tasksPendingCount = (tasks ?? [])
+    .filter((t) => !t.done && (!t.due_date || t.due_date <= todayStr)).length;
   const shoppingPendingCount = (shoppingItems ?? []).filter((i) => !i.done).length;
 
   // Member leaderboard: tasks done per member

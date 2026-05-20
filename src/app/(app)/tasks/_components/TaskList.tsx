@@ -25,6 +25,7 @@ import {
   Check,
   X,
   Calendar,
+  CalendarClock,
   RefreshCw,
   ArrowUpDown,
 } from "lucide-react";
@@ -83,6 +84,18 @@ function isOverdue(dateStr: string | null, done: boolean) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(dateStr + "T00:00:00") < today;
+}
+
+// Tasks with a future due_date become visible at 1 AM of that day
+function getEffectiveToday(): string {
+  const now = new Date();
+  if (now.getHours() < 1) {
+    now.setDate(now.getDate() - 1);
+  }
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 type EditState = {
@@ -380,6 +393,72 @@ function TaskItem({
   );
 }
 
+function UpcomingTaskItem({
+  task,
+  members,
+  currentUserId,
+  onDelete,
+}: {
+  task: TaskWithAssignee;
+  members: Member[];
+  currentUserId: string;
+  onDelete: (id: string) => void;
+}) {
+  const assigneeName = task.profiles?.name ?? null;
+  const formattedDue = formatDate(task.due_date);
+
+  return (
+    <motion.div
+      variants={listItemVariants}
+      initial="hidden"
+      animate="show"
+      exit="exit"
+      layout="position"
+      className="mb-2"
+    >
+      <div className="rounded-2xl border border-dashed bg-card/40 transition-opacity">
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <div className="shrink-0 text-muted-foreground/60">
+            <CalendarClock size={18} strokeWidth={1.75} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium leading-snug text-muted-foreground">
+              {task.title}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+              {assigneeName && (
+                <p className="text-muted-foreground/70 text-xs">
+                  {assigneeName}
+                  {task.assigned_to === currentUserId ? " · vos" : ""}
+                </p>
+              )}
+              {formattedDue && (
+                <span className="flex items-center gap-0.5 text-xs text-muted-foreground/70">
+                  <Calendar size={10} strokeWidth={2} />
+                  {formattedDue}
+                </span>
+              )}
+              {task.recurrence && (
+                <span className="flex items-center gap-0.5 text-xs text-muted-foreground/70">
+                  <RefreshCw size={10} strokeWidth={2} />
+                  {RECURRENCE_LABELS[task.recurrence]}
+                </span>
+              )}
+            </div>
+          </div>
+          <motion.button
+            onClick={() => onDelete(task.id)}
+            whileTap={{ scale: 0.82 }}
+            className="rounded-lg p-1.5 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+          >
+            <Trash2 size={14} />
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 const UNASSIGNED = "__unassigned__";
 
 export default function TaskList({ tasks, members, currentUserId }: Props) {
@@ -389,6 +468,8 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
   const chipsRef = useRef<HTMLDivElement>(null);
+
+  const effectiveToday = getEffectiveToday();
 
   const [optimisticTasks, updateOptimistic] = useOptimistic(
     tasks,
@@ -421,8 +502,15 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
     setSelectedMembers([]);
   }
 
+  // Recurring tasks with a future due_date live in the "upcoming" section
+  const upcomingTasks = optimisticTasks.filter(
+    (t) => !t.done && t.recurrence && t.due_date && t.due_date > effectiveToday,
+  );
+  const upcomingIds = new Set(upcomingTasks.map((t) => t.id));
+  const activeTasks = optimisticTasks.filter((t) => !upcomingIds.has(t.id));
+
   // Apply status filter
-  let filtered = optimisticTasks.filter((t) =>
+  let filtered = activeTasks.filter((t) =>
     statusFilter === "all"
       ? true
       : statusFilter === "pending"
@@ -452,7 +540,7 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
     return b.created_at.localeCompare(a.created_at);
   });
 
-  const pendingCount = optimisticTasks.filter((t) => !t.done).length;
+  const pendingCount = activeTasks.filter((t) => !t.done).length;
 
   function handleToggle(id: string, done: boolean) {
     startTransition(async () => {
@@ -728,6 +816,29 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
             ))}
           </AnimatePresence>
         </div>
+
+        {/* Upcoming recurring tasks */}
+        {upcomingTasks.length > 0 && (
+          <div className="px-4 mt-6 mb-2">
+            <div className="flex items-center gap-2 mb-3 px-0.5">
+              <CalendarClock size={13} className="text-muted-foreground/70" />
+              <span className="text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider">
+                Próximas
+              </span>
+            </div>
+            <AnimatePresence mode="popLayout">
+              {upcomingTasks.map((task) => (
+                <UpcomingTaskItem
+                  key={task.id}
+                  task={task}
+                  members={members}
+                  currentUserId={currentUserId}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
     </main>
   );

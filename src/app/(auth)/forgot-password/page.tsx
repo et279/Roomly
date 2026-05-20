@@ -2,33 +2,56 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { signIn } from "@/lib/actions/auth";
+import { forgotPassword } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export default function LoginPage() {
-  const [state, action, isPending] = useActionState(signIn, null);
+export default function ForgotPasswordPage() {
+  const [state, action, isPending] = useActionState(forgotPassword, null);
+
+  if (state?.success) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-5 text-center">
+          <div className="text-5xl">📬</div>
+          <div className="space-y-1.5">
+            <h2 className="text-xl font-bold tracking-tight">Revisá tu email</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              Si el email existe en nuestra base, te enviamos un link para
+              restablecer tu contraseña.
+            </p>
+          </div>
+          <Link href="/login">
+            <Button variant="outline" className="w-full rounded-xl">
+              Volver al login
+            </Button>
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm space-y-8">
-        {/* Logo / brand */}
         <div className="space-y-2 text-center">
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-foreground text-background text-2xl font-bold mx-auto">
             R
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Roomly</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Olvidé mi contraseña</h1>
           <p className="text-muted-foreground text-sm">
-            Iniciá sesión para continuar
+            Te enviamos un link para restablecerla
           </p>
         </div>
 
-        {/* Form */}
         <div className="rounded-2xl border bg-card p-6 card-shadow space-y-4">
           <form action={action} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              <Label
+                htmlFor="email"
+                className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+              >
                 Email
               </Label>
               <Input
@@ -37,29 +60,6 @@ export default function LoginPage() {
                 type="email"
                 placeholder="tu@email.com"
                 autoComplete="email"
-                required
-                className="rounded-xl"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Contraseña
-                </Label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                >
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                autoComplete="current-password"
                 required
                 className="rounded-xl"
               />
@@ -76,18 +76,17 @@ export default function LoginPage() {
               className="w-full rounded-xl"
               disabled={isPending}
             >
-              {isPending ? "Ingresando..." : "Ingresar"}
+              {isPending ? "Enviando..." : "Enviar link"}
             </Button>
           </form>
         </div>
 
         <p className="text-muted-foreground text-center text-sm">
-          ¿No tenés cuenta?{" "}
           <Link
-            href="/register"
+            href="/login"
             className="text-foreground font-semibold underline underline-offset-4"
           >
-            Registrate
+            Volver al login
           </Link>
         </p>
       </div>

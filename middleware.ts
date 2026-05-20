@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
-  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+  const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/forgot-password");
   const isOnboarding = pathname.startsWith("/create-home") || pathname.startsWith("/invite");
   const isAuthCallback = pathname.startsWith("/auth/");
   const isJoinRoute = pathname.startsWith("/join/");
