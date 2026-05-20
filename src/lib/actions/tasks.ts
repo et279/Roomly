@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Recurrence } from "@/types";
+import { awardTaskPoints } from "@/lib/actions/gamification";
 
 async function getUserAndHome() {
   const supabase = await createClient();
@@ -88,16 +89,23 @@ export async function toggleTask(id: string, done: boolean) {
       .eq("id", id)
       .single();
 
-    if (task?.recurrence) {
-      await admin.from("tasks").insert({
-        home_id: task.home_id,
-        title: task.title,
-        assigned_to: task.assigned_to,
-        created_by: task.created_by,
-        due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
-        recurrence: task.recurrence,
-        done: false,
-      });
+    if (task) {
+      const completedAt = new Date().toISOString();
+
+      // Award points — fire-and-forget, never block the main flow
+      awardTaskPoints(user.id, task.home_id, task.due_date, completedAt).catch(() => {});
+
+      if (task.recurrence) {
+        await admin.from("tasks").insert({
+          home_id: task.home_id,
+          title: task.title,
+          assigned_to: task.assigned_to,
+          created_by: task.created_by,
+          due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
+          recurrence: task.recurrence,
+          done: false,
+        });
+      }
     }
   }
 

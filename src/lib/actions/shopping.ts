@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { awardShoppingPoints } from "@/lib/actions/gamification";
 
 async function getUserAndHome() {
   const supabase = await createClient();
@@ -46,8 +47,25 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
 }
 
 export async function toggleShoppingItem(id: string, done: boolean) {
-  const { admin } = await getUserAndHome();
-  await admin.from("shopping_items").update({ done }).eq("id", id);
+  const { user, admin } = await getUserAndHome();
+
+  await admin
+    .from("shopping_items")
+    .update({ done, completed_by: done ? user.id : null })
+    .eq("id", id);
+
+  if (done) {
+    const { data: item } = await admin
+      .from("shopping_items")
+      .select("home_id")
+      .eq("id", id)
+      .single();
+
+    if (item) {
+      awardShoppingPoints(user.id, item.home_id).catch(() => {});
+    }
+  }
+
   revalidatePath("/shopping");
   revalidatePath("/");
 }

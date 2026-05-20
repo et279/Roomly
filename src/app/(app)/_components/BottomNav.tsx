@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, ListTodo, ShoppingCart, User, Wallet } from "lucide-react";
+import { Home, ListTodo, ShoppingCart, User, Wallet, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 
 const links = [
@@ -10,6 +10,7 @@ const links = [
   { href: "/tasks", icon: ListTodo, label: "Tareas" },
   { href: "/shopping", icon: ShoppingCart, label: "Compras" },
   { href: "/finance", icon: Wallet, label: "Finanzas" },
+  { href: "/ranking", icon: Trophy, label: "Ranking" },
   { href: "/profile", icon: User, label: "Perfil" },
 ];
 

@@ -251,10 +251,18 @@ export default function DashboardContent({
             }}
             className="space-y-3"
           >
-            <h2 className="font-semibold text-[15px] tracking-tight flex items-center gap-1.5">
-              <Trophy size={15} className="text-muted-foreground" />
-              Actividad del hogar
-            </h2>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-[15px] tracking-tight flex items-center gap-1.5">
+                <Trophy size={15} className="text-muted-foreground" />
+                Actividad del hogar
+              </h2>
+              <Link
+                href="/ranking"
+                className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Ver ranking <ChevronRight size={13} strokeWidth={2} />
+              </Link>
+            </div>
             <ul className="space-y-1.5">
               {sortedMembers.map((m, i) => (
                 <li

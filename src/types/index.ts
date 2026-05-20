@@ -160,3 +160,76 @@ export type UserBalance = {
   owes: number;
   isCreditor: boolean;
 };
+
+// ── Gamification ────────────────────────────────────────────────────────────
+
+export type AchievementCategory = "tasks" | "shopping" | "finance" | "ranking" | "general";
+export type PeriodType = "biweekly" | "monthly";
+export type PeriodStatus = "active" | "closed";
+export type AchievementCondition = "tasks_completed" | "shopping_done" | "contributions_paid" | "periods_won";
+
+export type Achievement = {
+  id: string;
+  key: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: AchievementCategory;
+  points: number;
+  condition_type: AchievementCondition;
+  condition_value: number;
+};
+
+export type AchievementWithStatus = Achievement & {
+  earned: boolean;
+  earned_at: string | null;
+};
+
+export type GamificationSettings = {
+  id: string;
+  home_id: string;
+  enabled: boolean;
+  period_type: PeriodType;
+};
+
+export type RankingPeriod = {
+  id: string;
+  home_id: string;
+  period_type: PeriodType;
+  start_date: string;
+  end_date: string;
+  status: PeriodStatus;
+  created_by: string;
+  created_at: string;
+};
+
+export type RankingPrize = {
+  id: string;
+  period_id: string;
+  rank: number;
+  prize_description: string;
+};
+
+export type PeriodScore = {
+  id: string;
+  period_id: string;
+  home_id: string;
+  user_id: string;
+  tasks_points: number;
+  shopping_points: number;
+  finance_points: number;
+  achievement_points: number;
+  total_points: number;
+  final_rank: number | null;
+};
+
+export type PeriodScoreWithProfile = PeriodScore & {
+  profiles: { name: string } | null;
+};
+
+export type ActivityCounters = {
+  tasks_completed: number;
+  shopping_done: number;
+  contributions_paid: number;
+  periods_won: number;
+};

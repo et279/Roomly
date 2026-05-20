@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ContributionStatus } from "@/types";
+import { awardFinancePoints } from "@/lib/actions/gamification";
 
 async function getUserAndHome() {
   const supabase = await createClient();
@@ -77,6 +78,17 @@ export async function updateContributionPayment(id: string, paidAmount: number) 
     .from("house_contributions")
     .update({ paid_amount: paidAmount, status, updated_at: new Date().toISOString() })
     .eq("id", id);
+
+  if (status === "paid") {
+    const { data: full } = await admin
+      .from("house_contributions")
+      .select("user_id, home_id")
+      .eq("id", id)
+      .single();
+    if (full) {
+      awardFinancePoints(full.user_id, full.home_id).catch(() => {});
+    }
+  }
 
   revalidatePath("/finance");
   revalidatePath("/finance/contributions");
