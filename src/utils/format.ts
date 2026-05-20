@@ -1,3 +1,10 @@
+export function formatMoney(amount: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("es-AR", {
     day: "2-digit",

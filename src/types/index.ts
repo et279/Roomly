@@ -77,3 +77,86 @@ export type MemberStat = {
   pending: number;
   done: number;
 };
+
+// ── Finanzas del Hogar ─────────────────────────────────────
+
+export type FinancialRecordType =
+  | "income"
+  | "expense"
+  | "saving"
+  | "transfer"
+  | "adjustment";
+
+export type ContributionStatus = "paid" | "partial" | "pending" | "overdue";
+
+export type ExpenseCategory = {
+  id: string;
+  home_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  created_at: string;
+};
+
+export type FinancialRecord = {
+  id: string;
+  home_id: string;
+  user_id: string;
+  type: FinancialRecordType;
+  amount: number;
+  category_id: string | null;
+  description: string | null;
+  date: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FinancialRecordWithDetails = FinancialRecord & {
+  profiles: { name: string } | null;
+  expense_categories: { name: string; icon: string; color: string } | null;
+};
+
+export type HouseContribution = {
+  id: string;
+  home_id: string;
+  user_id: string;
+  amount: number;
+  paid_amount: number;
+  status: ContributionStatus;
+  due_date: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HouseContributionWithProfile = HouseContribution & {
+  profiles: { name: string } | null;
+};
+
+export type SavingGoal = {
+  id: string;
+  home_id: string;
+  name: string;
+  target_amount: number;
+  current_amount: number;
+  deadline: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FinanceMetrics = {
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  monthlyBalance: number;
+  monthlySavings: number;
+  topCategory: { name: string; icon: string; color: string; total: number } | null;
+  expensesByCategory: { category: ExpenseCategory | null; total: number }[];
+};
+
+export type UserBalance = {
+  userId: string;
+  name: string;
+  totalPaid: number;
+  owes: number;
+  isCreditor: boolean;
+};

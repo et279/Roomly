@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, ListTodo, ShoppingCart, User } from "lucide-react";
+import { Home, ListTodo, ShoppingCart, User, Wallet } from "lucide-react";
 import { motion } from "framer-motion";
 
 const links = [
   { href: "/", icon: Home, label: "Inicio" },
   { href: "/tasks", icon: ListTodo, label: "Tareas" },
   { href: "/shopping", icon: ShoppingCart, label: "Compras" },
+  { href: "/finance", icon: Wallet, label: "Finanzas" },
   { href: "/profile", icon: User, label: "Perfil" },
 ];
 
@@ -29,7 +30,7 @@ export default function BottomNav() {
       >
         <div className="flex">
           {links.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href;
+            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
               <Link
                 key={href}
