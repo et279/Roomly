@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Home, Mail, LogOut } from "lucide-react";
 
 export default async function ProfilePage() {
@@ -73,6 +74,13 @@ export default async function ProfilePage() {
               <p className="text-xs text-muted-foreground">Hogar</p>
               <p className="text-sm font-medium truncate">{homeName}</p>
             </div>
+          </div>
+        </div>
+
+        {/* Apariencia */}
+        <div className="rounded-2xl border bg-card card-shadow overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <ThemeToggle />
           </div>
         </div>
 
