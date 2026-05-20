@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import TaskList from "./_components/TaskList";
-import type { TaskWithAssignee } from "@/types";
+import type { TaskWithAssignee, Recurrence } from "@/types";
 
 export default async function TasksPage() {
   const supabase = await createClient();
@@ -28,16 +28,28 @@ export default async function TasksPage() {
 
   const memberIds = (memberRows ?? []).map((m) => m.user_id);
 
-  const [{ data: tasks }, { data: memberProfiles }] = await Promise.all([
+  const BASE_COLS =
+    "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at";
+
+  const [tasksResult, { data: memberProfiles }] = await Promise.all([
     admin
       .from("tasks")
-      .select(
-        "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at, recurrence",
-      )
+      .select(`${BASE_COLS}, recurrence`)
       .eq("home_id", membership.home_id)
       .order("created_at", { ascending: false }),
     admin.from("profiles").select("id, name").in("id", memberIds),
   ]);
+
+  // Fallback if recurrence column doesn't exist yet (migration pending)
+  const tasks = tasksResult.error
+    ? (
+        await admin
+          .from("tasks")
+          .select(BASE_COLS)
+          .eq("home_id", membership.home_id)
+          .order("created_at", { ascending: false })
+      ).data
+    : tasksResult.data;
 
   const members = (memberRows ?? []).map((m) => ({
     user_id: m.user_id,
@@ -53,7 +65,7 @@ export default async function TasksPage() {
     original_assigned_to: t.original_assigned_to ?? null,
     assignee_changed_by: t.assignee_changed_by ?? null,
     assignee_changed_at: t.assignee_changed_at ?? null,
-    recurrence: (t.recurrence as import("@/types").Recurrence | null) ?? null,
+    recurrence: ("recurrence" in t ? (t.recurrence as Recurrence | null) : null) ?? null,
     profiles: t.assigned_to
       ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
       : null,
