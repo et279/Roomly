@@ -13,12 +13,13 @@ export default async function TasksPage() {
 
   const admin = createAdminClient();
 
-  const { data: membership } = await admin
+  const { data: membershipRows } = await admin
     .from("home_members")
     .select("home_id")
     .eq("user_id", user.id)
-    .single();
+    .limit(1);
 
+  const membership = membershipRows?.[0] ?? null;
   if (!membership) redirect("/create-home");
 
   const { data: memberRows } = await admin
