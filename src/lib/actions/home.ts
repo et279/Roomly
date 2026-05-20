@@ -21,6 +21,15 @@ export async function createHome(_: unknown, formData: FormData) {
 
   const admin = createAdminClient();
 
+  // If user already belongs to a home, send them to the app instead of creating another
+  const { data: existingMembers } = await admin
+    .from("home_members")
+    .select("home_id")
+    .eq("user_id", user.id)
+    .limit(1);
+
+  if (existingMembers && existingMembers.length > 0) redirect("/");
+
   const { data: home, error } = await admin
     .from("homes")
     .insert({ name: name.trim(), created_by: user.id })

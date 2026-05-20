@@ -31,9 +31,18 @@ export async function GET(
   } = await supabase.auth.getUser();
 
   if (user) {
-    await admin
+    // Only join if the user doesn't already belong to a home
+    const { data: existingMember } = await admin
       .from("home_members")
-      .insert({ home_id: inviteLink.home_id, user_id: user.id });
+      .select("home_id")
+      .eq("user_id", user.id)
+      .limit(1);
+
+    if (!existingMember || existingMember.length === 0) {
+      await admin
+        .from("home_members")
+        .insert({ home_id: inviteLink.home_id, user_id: user.id });
+    }
     return NextResponse.redirect(`${origin}/`);
   }
 

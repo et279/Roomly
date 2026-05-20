@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Recurrence } from "@/types";
 
 async function getUserAndHome() {
   const supabase = await createClient();
@@ -22,10 +23,30 @@ async function getUserAndHome() {
   return { user, homeId: membership?.home_id ?? null, admin };
 }
 
+function nextDueDate(current: string | null, recurrence: Recurrence): string {
+  const base = current ? new Date(current + "T00:00:00") : new Date();
+  switch (recurrence) {
+    case "daily":
+      base.setDate(base.getDate() + 1);
+      break;
+    case "weekly":
+      base.setDate(base.getDate() + 7);
+      break;
+    case "biweekly":
+      base.setDate(base.getDate() + 14);
+      break;
+    case "monthly":
+      base.setMonth(base.getMonth() + 1);
+      break;
+  }
+  return base.toISOString().split("T")[0];
+}
+
 export async function createTask(_: unknown, formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
   const assignedTo = formData.get("assigned_to") as string | null;
   const dueDate = formData.get("due_date") as string | null;
+  const recurrence = (formData.get("recurrence") as Recurrence | null) || null;
 
   if (!title) return { error: "El título no puede estar vacío" };
 
@@ -38,6 +59,7 @@ export async function createTask(_: unknown, formData: FormData) {
     assigned_to: assignedTo || null,
     due_date: dueDate || null,
     created_by: user.id,
+    recurrence: recurrence || null,
   });
 
   if (error) return { error: error.message };
@@ -49,6 +71,7 @@ export async function createTask(_: unknown, formData: FormData) {
 
 export async function toggleTask(id: string, done: boolean) {
   const { user, admin } = await getUserAndHome();
+
   await admin
     .from("tasks")
     .update({
@@ -57,13 +80,38 @@ export async function toggleTask(id: string, done: boolean) {
       completed_at: done ? new Date().toISOString() : null,
     })
     .eq("id", id);
+
+  if (done) {
+    const { data: task } = await admin
+      .from("tasks")
+      .select("home_id, title, assigned_to, created_by, due_date, recurrence")
+      .eq("id", id)
+      .single();
+
+    if (task?.recurrence) {
+      await admin.from("tasks").insert({
+        home_id: task.home_id,
+        title: task.title,
+        assigned_to: task.assigned_to,
+        created_by: task.created_by,
+        due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
+        recurrence: task.recurrence,
+        done: false,
+      });
+    }
+  }
+
   revalidatePath("/tasks");
   revalidatePath("/");
 }
 
 export async function updateTask(
   id: string,
-  updates: { assigned_to?: string | null; due_date?: string | null },
+  updates: {
+    assigned_to?: string | null;
+    due_date?: string | null;
+    recurrence?: Recurrence | null;
+  },
 ) {
   const { user, admin } = await getUserAndHome();
 
@@ -71,6 +119,10 @@ export async function updateTask(
 
   if ("due_date" in updates) {
     payload.due_date = updates.due_date || null;
+  }
+
+  if ("recurrence" in updates) {
+    payload.recurrence = updates.recurrence || null;
   }
 
   if ("assigned_to" in updates) {

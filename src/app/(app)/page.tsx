@@ -13,17 +13,18 @@ export default async function DashboardPage() {
 
   const admin = createAdminClient();
 
-  const [{ data: profile }, { data: membership }] = await Promise.all([
+  const [{ data: profile }, { data: membershipRows }] = await Promise.all([
     admin.from("profiles").select("name").eq("id", user.id).single(),
     admin
       .from("home_members")
       .select("home_id, homes(name, created_by)")
       .eq("user_id", user.id)
-      .single(),
+      .limit(1),
   ]);
 
+  const membership = membershipRows?.[0] ?? null;
   const homeId = membership?.home_id;
-  const homeData = membership?.homes as unknown as { name: string; created_by: string } | null;
+  const homeData = (membership as unknown as { home_id: string; homes: { name: string; created_by: string } } | null)?.homes ?? null;
   const homeName = homeData?.name ?? "Mi hogar";
   const isAdmin = homeData?.created_by === user.id;
 

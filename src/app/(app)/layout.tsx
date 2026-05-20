@@ -17,13 +17,13 @@ export default async function AppLayout({
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const admin = createAdminClient();
 
-  const { data: member } = await admin
+  const { data: memberRows } = await admin
     .from("home_members")
     .select("home_id")
     .eq("user_id", user.id)
-    .single();
+    .limit(1);
 
-  if (!member) redirect("/create-home");
+  if (!memberRows || memberRows.length === 0) redirect("/create-home");
 
   return (
     <div

@@ -32,7 +32,7 @@ export default async function TasksPage() {
     admin
       .from("tasks")
       .select(
-        "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at",
+        "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at, recurrence",
       )
       .eq("home_id", membership.home_id)
       .order("created_at", { ascending: false }),
@@ -53,6 +53,7 @@ export default async function TasksPage() {
     original_assigned_to: t.original_assigned_to ?? null,
     assignee_changed_by: t.assignee_changed_by ?? null,
     assignee_changed_at: t.assignee_changed_at ?? null,
+    recurrence: (t.recurrence as import("@/types").Recurrence | null) ?? null,
     profiles: t.assigned_to
       ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
       : null,

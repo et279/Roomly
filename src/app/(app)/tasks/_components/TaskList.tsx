@@ -5,6 +5,7 @@ import {
   useOptimistic,
   useTransition,
   useState,
+  useRef,
 } from "react";
 import {
   createTask,
@@ -12,7 +13,7 @@ import {
   deleteTask,
   updateTask,
 } from "@/lib/actions/tasks";
-import type { TaskWithAssignee } from "@/types";
+import type { TaskWithAssignee, Recurrence } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,6 +25,8 @@ import {
   Check,
   X,
   Calendar,
+  RefreshCw,
+  ArrowUpDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -38,11 +41,19 @@ type Props = {
   currentUserId: string;
 };
 
-type Filter = "all" | "pending" | "done";
+type StatusFilter = "all" | "pending" | "done";
+type SortMode = "recent" | "date";
 
 type OptimisticAction =
   | { type: "toggle"; id: string; done: boolean }
   | { type: "delete"; id: string };
+
+const RECURRENCE_LABELS: Record<Recurrence, string> = {
+  daily: "Diaria",
+  weekly: "Semanal",
+  biweekly: "Quincenal",
+  monthly: "Mensual",
+};
 
 const listItemVariants = {
   hidden: { opacity: 0, y: 6 },
@@ -77,6 +88,7 @@ function isOverdue(dateStr: string | null, done: boolean) {
 type EditState = {
   assignedTo: string;
   dueDate: string;
+  recurrence: Recurrence | "";
 };
 
 function TaskItem({
@@ -99,12 +111,14 @@ function TaskItem({
   const [editState, setEditState] = useState<EditState>({
     assignedTo: task.assigned_to ?? "",
     dueDate: task.due_date ?? "",
+    recurrence: task.recurrence ?? "",
   });
 
   function openEdit() {
     setEditState({
       assignedTo: task.assigned_to ?? "",
       dueDate: task.due_date ?? "",
+      recurrence: task.recurrence ?? "",
     });
     setEditing(true);
   }
@@ -114,6 +128,7 @@ function TaskItem({
       await updateTask(task.id, {
         assigned_to: editState.assignedTo || null,
         due_date: editState.dueDate || null,
+        recurrence: (editState.recurrence as Recurrence) || null,
       });
       setEditing(false);
     });
@@ -203,13 +218,18 @@ function TaskItem({
               {formattedDue && (
                 <span
                   className={`flex items-center gap-0.5 text-xs font-medium ${
-                    overdue
-                      ? "text-destructive"
-                      : "text-muted-foreground"
+                    overdue ? "text-destructive" : "text-muted-foreground"
                   }`}
                 >
                   <Calendar size={10} strokeWidth={2} />
                   {formattedDue}
+                </span>
+              )}
+
+              {task.recurrence && (
+                <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
+                  <RefreshCw size={10} strokeWidth={2} />
+                  {RECURRENCE_LABELS[task.recurrence]}
                 </span>
               )}
             </div>
@@ -217,7 +237,15 @@ function TaskItem({
             {task.done && completedByName && (
               <p className="text-[11px] text-muted-foreground mt-0.5">
                 {completedBySelf
-                  ? `Hecha por ${completedByName === task.profiles?.name ? (task.completed_by === currentUserId ? "vos" : completedByName) : (task.completed_by === currentUserId ? "vos" : completedByName)}`
+                  ? `Hecha por ${
+                      completedByName === task.profiles?.name
+                        ? task.completed_by === currentUserId
+                          ? "vos"
+                          : completedByName
+                        : task.completed_by === currentUserId
+                          ? "vos"
+                          : completedByName
+                    }`
                   : `Hecha por ${task.completed_by === currentUserId ? "vos" : completedByName}${assigneeName ? ` (era ${task.assigned_to === currentUserId ? "vos" : assigneeName})` : ""}`}
               </p>
             )}
@@ -301,6 +329,28 @@ function TaskItem({
                     />
                   </div>
 
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                      Recurrencia
+                    </label>
+                    <select
+                      value={editState.recurrence}
+                      onChange={(e) =>
+                        setEditState((s) => ({
+                          ...s,
+                          recurrence: e.target.value as Recurrence | "",
+                        }))
+                      }
+                      className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-foreground/15"
+                    >
+                      <option value="">Sin repetición</option>
+                      <option value="daily">Diaria</option>
+                      <option value="weekly">Semanal</option>
+                      <option value="biweekly">Quincenal</option>
+                      <option value="monthly">Mensual</option>
+                    </select>
+                  </div>
+
                   <div className="flex gap-2 pt-0.5">
                     <Button
                       size="sm"
@@ -330,10 +380,15 @@ function TaskItem({
   );
 }
 
+const UNASSIGNED = "__unassigned__";
+
 export default function TaskList({ tasks, members, currentUserId }: Props) {
-  const [filter, setFilter] = useState<Filter>("pending");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
   const [showForm, setShowForm] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const chipsRef = useRef<HTMLDivElement>(null);
 
   const [optimisticTasks, updateOptimistic] = useOptimistic(
     tasks,
@@ -356,9 +411,46 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
     null,
   );
 
-  const filtered = optimisticTasks.filter((t) =>
-    filter === "all" ? true : filter === "pending" ? !t.done : t.done,
+  function toggleMemberFilter(id: string) {
+    setSelectedMembers((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function clearMemberFilter() {
+    setSelectedMembers([]);
+  }
+
+  // Apply status filter
+  let filtered = optimisticTasks.filter((t) =>
+    statusFilter === "all"
+      ? true
+      : statusFilter === "pending"
+        ? !t.done
+        : t.done,
   );
+
+  // Apply member multi-filter
+  if (selectedMembers.length > 0) {
+    filtered = filtered.filter((t) => {
+      if (selectedMembers.includes(UNASSIGNED) && t.assigned_to === null)
+        return true;
+      if (t.assigned_to && selectedMembers.includes(t.assigned_to)) return true;
+      return false;
+    });
+  }
+
+  // Apply sort
+  filtered = [...filtered].sort((a, b) => {
+    if (sortMode === "date") {
+      if (!a.due_date && !b.due_date) return 0;
+      if (!a.due_date) return 1;
+      if (!b.due_date) return -1;
+      return a.due_date.localeCompare(b.due_date);
+    }
+    // recent: by created_at desc
+    return b.created_at.localeCompare(a.created_at);
+  });
 
   const pendingCount = optimisticTasks.filter((t) => !t.done).length;
 
@@ -376,11 +468,13 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
     });
   }
 
+  const hasActiveFilter = selectedMembers.length > 0;
+
   return (
     <main className="min-h-screen bg-background pb-28">
       <div className="mx-auto max-w-md">
         {/* Header */}
-        <div className="px-4 pt-9 pb-5 space-y-4">
+        <div className="px-4 pt-9 pb-4 space-y-4">
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -416,15 +510,15 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
             </motion.button>
           </motion.div>
 
-          {/* Filter tabs */}
+          {/* Status filter tabs */}
           <div className="relative flex gap-1 rounded-2xl bg-muted p-1">
-            {(["pending", "all", "done"] as Filter[]).map((f) => (
+            {(["pending", "all", "done"] as StatusFilter[]).map((f) => (
               <button
                 key={f}
-                onClick={() => setFilter(f)}
+                onClick={() => setStatusFilter(f)}
                 className="relative flex-1 rounded-xl py-2 text-sm font-medium z-10"
               >
-                {filter === f && (
+                {statusFilter === f && (
                   <motion.div
                     layoutId="task-filter-pill"
                     className="absolute inset-0 rounded-xl bg-card shadow-sm"
@@ -433,7 +527,9 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
                 )}
                 <span
                   className={`relative z-10 transition-colors duration-150 ${
-                    filter === f ? "text-foreground" : "text-muted-foreground"
+                    statusFilter === f
+                      ? "text-foreground"
+                      : "text-muted-foreground"
                   }`}
                 >
                   {f === "pending"
@@ -444,6 +540,69 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
                 </span>
               </button>
             ))}
+          </div>
+
+          {/* Member filter chips + sort */}
+          <div className="space-y-2">
+            <div
+              ref={chipsRef}
+              className="flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5"
+            >
+              {/* All chip */}
+              <button
+                onClick={clearMemberFilter}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+                  !hasActiveFilter
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-transparent text-muted-foreground border-border"
+                }`}
+              >
+                Todos
+              </button>
+
+              {/* Member chips */}
+              {members.map((m) =>
+                m.profiles ? (
+                  <button
+                    key={m.user_id}
+                    onClick={() => toggleMemberFilter(m.user_id)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+                      selectedMembers.includes(m.user_id)
+                        ? "bg-foreground text-background border-foreground"
+                        : "bg-transparent text-muted-foreground border-border"
+                    }`}
+                  >
+                    {m.profiles.name}
+                    {m.user_id === currentUserId ? " · vos" : ""}
+                  </button>
+                ) : null,
+              )}
+
+              {/* Unassigned chip */}
+              <button
+                onClick={() => toggleMemberFilter(UNASSIGNED)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors border ${
+                  selectedMembers.includes(UNASSIGNED)
+                    ? "bg-foreground text-background border-foreground"
+                    : "bg-transparent text-muted-foreground border-border"
+                }`}
+              >
+                Sin asignar
+              </button>
+            </div>
+
+            {/* Sort toggle */}
+            <div className="flex justify-end">
+              <button
+                onClick={() =>
+                  setSortMode((s) => (s === "recent" ? "date" : "recent"))
+                }
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowUpDown size={11} strokeWidth={2} />
+                {sortMode === "recent" ? "Recientes" : "Por fecha"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -492,6 +651,23 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
                     className="flex-1 rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-foreground/15"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <RefreshCw
+                    size={14}
+                    className="text-muted-foreground shrink-0"
+                  />
+                  <select
+                    name="recurrence"
+                    className="flex-1 rounded-xl border bg-card px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-foreground/15"
+                    defaultValue=""
+                  >
+                    <option value="">Sin repetición</option>
+                    <option value="daily">Diaria</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="biweekly">Quincenal</option>
+                    <option value="monthly">Mensual</option>
+                  </select>
+                </div>
                 {formState?.error && (
                   <p className="text-destructive text-sm">{formState.error}</p>
                 )}
@@ -519,14 +695,22 @@ export default function TaskList({ tasks, members, currentUserId }: Props) {
                 transition={{ duration: 0.2 }}
                 className="py-16 text-center space-y-2"
               >
-                <p className="text-3xl">{filter === "done" ? "📋" : "🎉"}</p>
+                <p className="text-3xl">
+                  {statusFilter === "done" ? "📋" : hasActiveFilter ? "🔍" : "🎉"}
+                </p>
                 <p className="text-sm font-semibold">
-                  {filter === "done" ? "Sin tareas hechas" : "Todo al día"}
+                  {statusFilter === "done"
+                    ? "Sin tareas hechas"
+                    : hasActiveFilter
+                      ? "Sin resultados"
+                      : "Todo al día"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {filter === "done"
+                  {statusFilter === "done"
                     ? "Completá una tarea para verla acá"
-                    : "No hay tareas pendientes"}
+                    : hasActiveFilter
+                      ? "Probá seleccionando otros filtros"
+                      : "No hay tareas pendientes"}
                 </p>
               </motion.div>
             )}

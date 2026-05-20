@@ -33,6 +33,8 @@ export type HomeWithMembers = Home & {
   home_members: HomeMember[];
 };
 
+export type Recurrence = "daily" | "weekly" | "biweekly" | "monthly";
+
 export type Task = {
   id: string;
   home_id: string;
@@ -47,6 +49,7 @@ export type Task = {
   original_assigned_to: string | null;
   assignee_changed_by: string | null;
   assignee_changed_at: string | null;
+  recurrence: Recurrence | null;
 };
 
 export type TaskWithAssignee = Task & {
