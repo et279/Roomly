@@ -2,7 +2,6 @@ import { getCurrentContext } from "@/lib/context/context";
 import { Permission } from "@/lib/security/permissions";
 import { getRankingData } from "@/lib/actions/gamification";
 import RankingContent from "./_components/RankingContent";
-import type { MemberWithProfile } from "@/types/database";
 
 export default async function RankingPage() {
   const ctx = await getCurrentContext();
@@ -19,9 +18,9 @@ export default async function RankingPage() {
     admin.from("profiles").select("id, name").eq("id", user.id).single(),
   ]);
 
-  const members = ((memberRows as MemberWithProfile[]) ?? []).map((m) => ({
-    user_id: m.user_id,
-    name: m.profiles?.name ?? "",
+  const members = (memberRows ?? []).map((m) => ({
+    user_id: m.user_id as string,
+    name: normProfile(m.profiles)?.name ?? "",
   }));
 
   function normProfile(p: unknown): { name: string } | null {
