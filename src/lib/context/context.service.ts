@@ -35,7 +35,7 @@ export async function getCurrentContext(): Promise<ServerContext> {
 
   if (!rawRow) redirect("/create-home");
 
-  const row = rawRow as HomeMemberWithRoleAndPermissions;
+  const row = rawRow as unknown as HomeMemberWithRoleAndPermissions;
   const homeInfo = row.homes;
   const roleInfo = row.roles;
 
@@ -79,7 +79,7 @@ async function buildLegacyContext(
 
   if (!rawRow) redirect("/create-home");
 
-  const row = rawRow as HomeMemberWithHome;
+  const row = rawRow as unknown as HomeMemberWithHome;
   const homeInfo = row.homes;
   const isCreator = homeInfo?.created_by === user.id;
 

@@ -10,6 +10,6 @@ export async function getCurrentHome(userId: string) {
     .eq("user_id", userId)
     .single();
 
-  const row = data as HomeMemberWithHomeFull | null;
+  const row = data as unknown as HomeMemberWithHomeFull | null;
   return row?.homes ?? null;
 }
