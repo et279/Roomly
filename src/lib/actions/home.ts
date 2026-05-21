@@ -4,6 +4,9 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentHome } from "@/lib/services/HomeService";
+
+export { getCurrentHome };
 
 export async function createHome(_: unknown, formData: FormData) {
   const name = formData.get("name") as string;
@@ -21,7 +24,6 @@ export async function createHome(_: unknown, formData: FormData) {
 
   const admin = createAdminClient();
 
-  // If user already belongs to a home, send them to the app instead of creating another
   const { data: existingMembers } = await admin
     .from("home_members")
     .select("home_id")
@@ -170,25 +172,4 @@ export async function removeMember(memberUserId: string) {
 
   revalidatePath("/");
   return { success: true };
-}
-
-export async function getCurrentHome(userId: string) {
-  const admin = createAdminClient();
-
-  const { data } = await admin
-    .from("home_members")
-    .select("homes(id, name, created_by, created_at)")
-    .eq("user_id", userId)
-    .single();
-
-  if (!data) return null;
-
-  return (
-    (data.homes as unknown as {
-      id: string;
-      name: string;
-      created_by: string;
-      created_at: string;
-    }) ?? null
-  );
 }

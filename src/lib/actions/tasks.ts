@@ -1,48 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { logger } from "@/lib/logger/logger";
+import { getCurrentContext } from "@/lib/context/context";
+import { completeTask, uncompleteTask } from "@/lib/services/TaskService";
 import type { Recurrence } from "@/types";
-import { awardTaskPoints } from "@/lib/actions/gamification";
-
-async function getUserAndHome() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("home_members")
-    .select("home_id")
-    .eq("user_id", user.id)
-    .single();
-
-  return { user, homeId: membership?.home_id ?? null, admin };
-}
-
-function nextDueDate(current: string | null, recurrence: Recurrence): string {
-  const base = current ? new Date(current + "T00:00:00") : new Date();
-  switch (recurrence) {
-    case "daily":
-      base.setDate(base.getDate() + 1);
-      break;
-    case "weekly":
-      base.setDate(base.getDate() + 7);
-      break;
-    case "biweekly":
-      base.setDate(base.getDate() + 14);
-      break;
-    case "monthly":
-      base.setMonth(base.getMonth() + 1);
-      break;
-  }
-  return base.toISOString().split("T")[0];
-}
 
 export async function createTask(_: unknown, formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
@@ -52,15 +13,14 @@ export async function createTask(_: unknown, formData: FormData) {
 
   if (!title) return { error: "El título no puede estar vacío" };
 
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return { error: "No pertenecés a ningún hogar" };
+  const ctx = await getCurrentContext();
 
-  const { error } = await admin.from("tasks").insert({
-    home_id: homeId,
+  const { error } = await ctx.admin.from("tasks").insert({
+    home_id: ctx.home.id,
     title,
     assigned_to: assignedTo || null,
     due_date: dueDate || null,
-    created_by: user.id,
+    created_by: ctx.user.id,
     recurrence: recurrence || null,
   });
 
@@ -72,51 +32,21 @@ export async function createTask(_: unknown, formData: FormData) {
 }
 
 export async function toggleTask(id: string, done: boolean) {
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
-  // Read first to verify ownership and get details needed for recurrence + points
-  const { data: task } = await admin
+  const { data: task } = await ctx.admin
     .from("tasks")
     .select("home_id, title, assigned_to, created_by, due_date, recurrence")
     .eq("id", id)
-    .eq("home_id", homeId)
+    .eq("home_id", ctx.home.id)
     .single();
 
   if (!task) return;
 
-  await admin
-    .from("tasks")
-    .update({
-      done,
-      completed_by: done ? user.id : null,
-      completed_at: done ? new Date().toISOString() : null,
-    })
-    .eq("id", id);
-
   if (done) {
-    const completedAt = new Date().toISOString();
-
-    awardTaskPoints(user.id, task.home_id, task.due_date, completedAt).catch(
-      (e) =>
-        logger.error("gamification", "awardTaskPoints failed", {
-          userId: user.id,
-          homeId: task.home_id,
-          error: e,
-        }),
-    );
-
-    if (task.recurrence) {
-      await admin.from("tasks").insert({
-        home_id: task.home_id,
-        title: task.title,
-        assigned_to: task.assigned_to,
-        created_by: task.created_by,
-        due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
-        recurrence: task.recurrence,
-        done: false,
-      });
-    }
+    await completeTask(ctx.admin, id, ctx.user.id, task);
+  } else {
+    await uncompleteTask(ctx.admin, id);
   }
 
   revalidatePath("/tasks");
@@ -131,8 +61,7 @@ export async function updateTask(
     recurrence?: Recurrence | null;
   },
 ) {
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
   const payload: Record<string, unknown> = {};
 
@@ -145,11 +74,11 @@ export async function updateTask(
   }
 
   if ("assigned_to" in updates) {
-    const { data: current } = await admin
+    const { data: current } = await ctx.admin
       .from("tasks")
       .select("assigned_to, original_assigned_to")
       .eq("id", id)
-      .eq("home_id", homeId)
+      .eq("home_id", ctx.home.id)
       .single();
 
     if (!current) return;
@@ -159,22 +88,30 @@ export async function updateTask(
     if (current.assigned_to !== updates.assigned_to) {
       payload.original_assigned_to =
         current.original_assigned_to ?? current.assigned_to;
-      payload.assignee_changed_by = user.id;
+      payload.assignee_changed_by = ctx.user.id;
       payload.assignee_changed_at = new Date().toISOString();
     }
   }
 
   if (Object.keys(payload).length === 0) return;
 
-  await admin.from("tasks").update(payload).eq("id", id).eq("home_id", homeId);
+  await ctx.admin
+    .from("tasks")
+    .update(payload)
+    .eq("id", id)
+    .eq("home_id", ctx.home.id);
+
   revalidatePath("/tasks");
   revalidatePath("/");
 }
 
 export async function deleteTask(id: string) {
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
-  await admin.from("tasks").delete().eq("id", id).eq("home_id", homeId);
+  const ctx = await getCurrentContext();
+  await ctx.admin
+    .from("tasks")
+    .delete()
+    .eq("id", id)
+    .eq("home_id", ctx.home.id);
   revalidatePath("/tasks");
   revalidatePath("/");
 }

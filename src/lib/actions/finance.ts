@@ -1,45 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentContext } from "@/lib/context/context";
 import type { FinancialRecordType } from "@/types";
-
-async function getUserAndHome() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("home_members")
-    .select("home_id")
-    .eq("user_id", user.id)
-    .single();
-
-  return { user, homeId: membership?.home_id ?? null, admin };
-}
 
 export async function createFinancialRecord(_: unknown, formData: FormData) {
   const type = formData.get("type") as FinancialRecordType;
   const amountRaw = formData.get("amount") as string;
   const categoryId = (formData.get("category_id") as string) || null;
   const description = (formData.get("description") as string)?.trim() || null;
-  const date = (formData.get("date") as string) || new Date().toISOString().split("T")[0];
+  const date =
+    (formData.get("date") as string) || new Date().toISOString().split("T")[0];
 
   const amount = parseFloat(amountRaw?.replace(/\./g, "").replace(",", "."));
   if (!type || isNaN(amount) || amount <= 0)
     return { error: "Tipo y monto son requeridos" };
 
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return { error: "No pertenecés a ningún hogar" };
+  const ctx = await getCurrentContext();
 
-  const { error } = await admin.from("financial_records").insert({
-    home_id: homeId,
-    user_id: user.id,
+  const { error } = await ctx.admin.from("financial_records").insert({
+    home_id: ctx.home.id,
+    user_id: ctx.user.id,
     type,
     amount,
     category_id: categoryId || null,
@@ -64,29 +45,26 @@ export async function updateFinancialRecord(
     date?: string;
   },
 ) {
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
-  // home_id filter ensures only records from this user's home are updated
-  await admin
+  await ctx.admin
     .from("financial_records")
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("home_id", homeId);
+    .eq("home_id", ctx.home.id);
 
   revalidatePath("/finance");
   revalidatePath("/finance/records");
 }
 
 export async function deleteFinancialRecord(id: string) {
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
-  await admin
+  await ctx.admin
     .from("financial_records")
     .delete()
     .eq("id", id)
-    .eq("home_id", homeId);
+    .eq("home_id", ctx.home.id);
 
   revalidatePath("/finance");
   revalidatePath("/finance/records");

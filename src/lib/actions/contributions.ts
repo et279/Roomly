@@ -1,36 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { logger } from "@/lib/logger/logger";
+import { getCurrentContext } from "@/lib/context/context";
+import { resolveContributionStatus, applyContributionPayment } from "@/lib/services/FinanceService";
 import type { ContributionStatus } from "@/types";
-import { awardFinancePoints } from "@/lib/actions/gamification";
-
-async function getUserAndHome() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("home_members")
-    .select("home_id")
-    .eq("user_id", user.id)
-    .single();
-
-  return { user, homeId: membership?.home_id ?? null, admin };
-}
-
-function resolveStatus(amount: number, paidAmount: number, dueDate: string): ContributionStatus {
-  if (paidAmount >= amount) return "paid";
-  if (paidAmount > 0) return "partial";
-  if (new Date(dueDate) < new Date()) return "overdue";
-  return "pending";
-}
 
 export async function createContribution(_: unknown, formData: FormData) {
   const userId = formData.get("user_id") as string;
@@ -42,15 +15,14 @@ export async function createContribution(_: unknown, formData: FormData) {
   if (!userId || isNaN(amount) || amount <= 0 || !dueDate)
     return { error: "Usuario, monto y fecha son requeridos" };
 
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return { error: "No pertenecés a ningún hogar" };
+  const ctx = await getCurrentContext();
 
-  const { error } = await admin.from("house_contributions").insert({
-    home_id: homeId,
+  const { error } = await ctx.admin.from("house_contributions").insert({
+    home_id: ctx.home.id,
     user_id: userId,
     amount,
     paid_amount: 0,
-    status: resolveStatus(amount, 0, dueDate),
+    status: resolveContributionStatus(amount, 0, dueDate) as ContributionStatus,
     due_date: dueDate,
     description,
   });
@@ -63,48 +35,30 @@ export async function createContribution(_: unknown, formData: FormData) {
 }
 
 export async function updateContributionPayment(id: string, paidAmount: number) {
-  const { admin, homeId } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
-  // home_id filter on read verifies ownership
-  const { data: contrib } = await admin
+  const { data: contrib } = await ctx.admin
     .from("house_contributions")
     .select("amount, due_date, user_id, home_id")
     .eq("id", id)
-    .eq("home_id", homeId)
+    .eq("home_id", ctx.home.id)
     .single();
 
   if (!contrib) return;
 
-  const status = resolveStatus(contrib.amount, paidAmount, contrib.due_date);
-
-  await admin
-    .from("house_contributions")
-    .update({ paid_amount: paidAmount, status, updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (status === "paid") {
-    awardFinancePoints(contrib.user_id, contrib.home_id).catch((e) =>
-      logger.error("gamification", "awardFinancePoints failed", {
-        userId: contrib.user_id,
-        homeId: contrib.home_id,
-        error: e,
-      }),
-    );
-  }
+  await applyContributionPayment(ctx.admin, id, contrib, paidAmount);
 
   revalidatePath("/finance");
   revalidatePath("/finance/contributions");
 }
 
 export async function deleteContribution(id: string) {
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
-  await admin
+  const ctx = await getCurrentContext();
+  await ctx.admin
     .from("house_contributions")
     .delete()
     .eq("id", id)
-    .eq("home_id", homeId);
+    .eq("home_id", ctx.home.id);
   revalidatePath("/finance");
   revalidatePath("/finance/contributions");
 }

@@ -4,6 +4,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import ShoppingList from "./_components/ShoppingList";
 import type { ShoppingItemWithAdder } from "@/types";
 
+type ShoppingItemRow = {
+  id: string;
+  home_id: string;
+  title: string;
+  quantity: string | null;
+  added_by: string | null;
+  done: boolean;
+  created_at: string;
+};
+
 export default async function ShoppingPage() {
   const supabase = await createClient();
   const {
@@ -38,17 +48,16 @@ export default async function ShoppingPage() {
     admin.from("profiles").select("id, name").in("id", memberIds),
   ]);
 
-  const itemsWithAdder = (items ?? []).map((item) => ({
-    ...item,
-    profiles: item.added_by
-      ? ((memberProfiles ?? []).find((p) => p.id === item.added_by) ?? null)
-      : null,
-  }));
+  const itemsWithAdder: ShoppingItemWithAdder[] = (items as ShoppingItemRow[] ?? []).map(
+    (item) => ({
+      ...item,
+      profiles: item.added_by
+        ? ((memberProfiles ?? []).find((p) => p.id === item.added_by) ?? null)
+        : null,
+    }),
+  );
 
   return (
-    <ShoppingList
-      items={itemsWithAdder as unknown as ShoppingItemWithAdder[]}
-      currentUserId={user.id}
-    />
+    <ShoppingList items={itemsWithAdder} currentUserId={user.id} />
   );
 }

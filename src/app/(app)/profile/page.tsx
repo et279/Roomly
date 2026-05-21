@@ -6,6 +6,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Home, Mail, LogOut } from "lucide-react";
 import { ChangeNameForm } from "./_components/ChangeNameForm";
 import { ChangePasswordForm } from "./_components/ChangePasswordForm";
+import type { HomeMemberWithHomeName } from "@/types/database";
 
 export default async function ProfilePage() {
   const supabase = await createClient();
@@ -21,15 +22,14 @@ export default async function ProfilePage() {
     .eq("id", user.id)
     .single();
 
-  const { data: membership } = await supabase
+  const { data: membershipRaw } = await supabase
     .from("home_members")
     .select("homes(name)")
     .eq("user_id", user.id)
     .single();
 
-  const homeName =
-    (membership?.homes as unknown as { name: string } | null)?.name ??
-    "Sin hogar";
+  const membership = membershipRaw as HomeMemberWithHomeName | null;
+  const homeName = membership?.homes?.name ?? "Sin hogar";
 
   const name = profile?.name ?? "—";
   const initials = name

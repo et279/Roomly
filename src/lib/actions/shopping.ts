@@ -1,28 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { logger } from "@/lib/logger/logger";
-import { awardShoppingPoints } from "@/lib/actions/gamification";
-
-async function getUserAndHome() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const admin = createAdminClient();
-  const { data: membership } = await admin
-    .from("home_members")
-    .select("home_id")
-    .eq("user_id", user.id)
-    .single();
-
-  return { user, homeId: membership?.home_id ?? null, admin };
-}
+import { getCurrentContext } from "@/lib/context/context";
+import { toggleShoppingItem as performToggle } from "@/lib/services/ShoppingService";
 
 export async function createShoppingItem(_: unknown, formData: FormData) {
   const title = (formData.get("title") as string)?.trim();
@@ -30,14 +10,13 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
 
   if (!title) return { error: "El nombre no puede estar vacío" };
 
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return { error: "No pertenecés a ningún hogar" };
+  const ctx = await getCurrentContext();
 
-  const { error } = await admin.from("shopping_items").insert({
-    home_id: homeId,
+  const { error } = await ctx.admin.from("shopping_items").insert({
+    home_id: ctx.home.id,
     title,
     quantity,
-    added_by: user.id,
+    added_by: ctx.user.id,
   });
 
   if (error) return { error: error.message };
@@ -48,42 +27,30 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
 }
 
 export async function toggleShoppingItem(id: string, done: boolean) {
-  const { user, homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
+  const ctx = await getCurrentContext();
 
-  // Read first to verify ownership and get home_id for points
-  const { data: item } = await admin
+  const { data: item } = await ctx.admin
     .from("shopping_items")
     .select("home_id")
     .eq("id", id)
-    .eq("home_id", homeId)
+    .eq("home_id", ctx.home.id)
     .single();
 
   if (!item) return;
 
-  await admin
-    .from("shopping_items")
-    .update({ done, completed_by: done ? user.id : null })
-    .eq("id", id);
-
-  if (done) {
-    awardShoppingPoints(user.id, item.home_id).catch((e) =>
-      logger.error("gamification", "awardShoppingPoints failed", {
-        userId: user.id,
-        homeId: item.home_id,
-        error: e,
-      }),
-    );
-  }
+  await performToggle(ctx.admin, id, done, ctx.user.id, item.home_id);
 
   revalidatePath("/shopping");
   revalidatePath("/");
 }
 
 export async function deleteShoppingItem(id: string) {
-  const { homeId, admin } = await getUserAndHome();
-  if (!homeId) return;
-  await admin.from("shopping_items").delete().eq("id", id).eq("home_id", homeId);
+  const ctx = await getCurrentContext();
+  await ctx.admin
+    .from("shopping_items")
+    .delete()
+    .eq("id", id)
+    .eq("home_id", ctx.home.id);
   revalidatePath("/shopping");
   revalidatePath("/");
 }

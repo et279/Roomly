@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import DashboardContent from "./_components/DashboardContent";
 import type { TaskWithAssignee, MemberStat } from "@/types";
+import type { HomeMemberWithHome } from "@/types/database";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -17,16 +18,16 @@ export default async function DashboardPage() {
     admin.from("profiles").select("name").eq("id", user.id).single(),
     admin
       .from("home_members")
-      .select("home_id, homes(name, created_by)")
+      .select("id, home_id, homes(name, created_by)")
       .eq("user_id", user.id)
       .limit(1),
   ]);
 
-  const membership = membershipRows?.[0] ?? null;
-  const homeId = membership?.home_id;
-  const homeData = (membership as unknown as { home_id: string; homes: { name: string; created_by: string } } | null)?.homes ?? null;
-  const homeName = homeData?.name ?? "Mi hogar";
-  const isAdmin = homeData?.created_by === user.id;
+  const membershipRow = (membershipRows?.[0] ?? null) as HomeMemberWithHome | null;
+  const homeId = membershipRow?.home_id;
+  const homeInfo = membershipRow?.homes ?? null;
+  const homeName = homeInfo?.name ?? "Mi hogar";
+  const isAdmin = homeInfo?.created_by === user.id;
 
   if (!homeId) redirect("/create-home");
 
@@ -40,7 +41,6 @@ export default async function DashboardPage() {
   const n = new Date();
   const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
 
-  // Split queries: COUNT for metrics, limit(5) for display — avoids loading all tasks (fixes KI-011)
   const [
     { data: pendingTasksRaw },
     { count: tasksDoneCount },
@@ -60,20 +60,17 @@ export default async function DashboardPage() {
       .limit(5),
     admin
       .from("tasks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("home_id", homeId)
       .eq("done", true),
     admin
       .from("tasks")
-      .select("*", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("home_id", homeId)
       .eq("done", false)
       .or(`due_date.is.null,due_date.lte.${todayStr}`),
     admin.from("profiles").select("id, name").in("id", memberIds),
-    admin
-      .from("shopping_items")
-      .select("id, done")
-      .eq("home_id", homeId),
+    admin.from("shopping_items").select("id, done").eq("home_id", homeId),
   ]);
 
   const pendingTasks = (pendingTasksRaw ?? []).map((t) => ({
@@ -92,19 +89,18 @@ export default async function DashboardPage() {
 
   const shoppingPendingCount = (shoppingItems ?? []).filter((i) => !i.done).length;
 
-  // Per-member stats via COUNT queries — accurate without loading all task rows
   const memberStats: MemberStat[] = await Promise.all(
     (memberProfiles ?? []).map(async (p) => {
       const [{ count: pending }, { count: done }] = await Promise.all([
         admin
           .from("tasks")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("home_id", homeId)
           .eq("assigned_to", p.id)
           .eq("done", false),
         admin
           .from("tasks")
-          .select("*", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("home_id", homeId)
           .eq("completed_by", p.id),
       ]);
