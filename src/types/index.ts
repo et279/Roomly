@@ -233,3 +233,11 @@ export type ActivityCounters = {
   contributions_paid: number;
   periods_won: number;
 };
+
+export type PrizePollOption = {
+  id: string;
+  period_id: string;
+  home_id: string;
+  option_text: string;
+  vote_count: number;
+};

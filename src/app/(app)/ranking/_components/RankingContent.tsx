@@ -19,7 +19,7 @@ import {
   X,
   Check,
 } from "lucide-react";
-import { configureGamification, savePrizes, closePeriod } from "@/lib/actions/gamification";
+import { configureGamification, savePrizes, closePeriod, savePollOptions, votePollOption } from "@/lib/actions/gamification";
 import type {
   GamificationSettings,
   RankingPeriod,
@@ -56,6 +56,8 @@ type Props = {
   homeId: string;
   members: { user_id: string; name: string }[];
   currentUserName: string;
+  pollOptions: { id: string; option_text: string; vote_count: number }[];
+  myVote: string | null;
 };
 
 const stagger = {
@@ -94,9 +96,12 @@ export default function RankingContent({
   currentUserId,
   homeId,
   members,
+  pollOptions,
+  myVote,
 }: Props) {
   const [showConfig, setShowConfig] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showPoll, setShowPoll] = useState(false);
   const [, startTransition] = useTransition();
 
   const enabled = settings?.enabled ?? false;
@@ -273,6 +278,27 @@ export default function RankingContent({
               )}
             </motion.section>
 
+            {/* Prize poll */}
+            {pollOptions.length > 0 ? (
+              <PrizePollCard
+                pollOptions={pollOptions}
+                myVote={myVote}
+                isAdmin={isAdmin}
+                onEdit={() => setShowPoll(true)}
+              />
+            ) : isAdmin ? (
+              <motion.button
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.18 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowPoll(true)}
+                className="w-full rounded-2xl border border-dashed px-4 py-3 text-xs font-medium text-muted-foreground hover:border-foreground hover:text-foreground transition-colors flex items-center justify-center gap-1.5"
+              >
+                🎁 Crear encuesta de premio para el 1er puesto
+              </motion.button>
+            ) : null}
+
             {/* Points legend */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -375,6 +401,16 @@ export default function RankingContent({
           />
         )}
       </AnimatePresence>
+
+      {/* Poll modal */}
+      <AnimatePresence>
+        {showPoll && (
+          <PollModal
+            currentOptions={pollOptions}
+            onClose={() => setShowPoll(false)}
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }
@@ -445,6 +481,221 @@ function CloseButton({ periodId, onClose }: { periodId: string; onClose: () => v
   );
 }
 
+function PrizePollCard({
+  pollOptions,
+  myVote,
+  isAdmin,
+  onEdit,
+}: {
+  pollOptions: { id: string; option_text: string; vote_count: number }[];
+  myVote: string | null;
+  isAdmin: boolean;
+  onEdit: () => void;
+}) {
+  const [optimisticVote, setOptimisticVote] = useState(myVote);
+  const [, startTransition] = useTransition();
+
+  const totalVotes = pollOptions.reduce((s, o) => s + o.vote_count, 0);
+
+  const adjustedOptions = pollOptions.map((opt) => ({
+    ...opt,
+    vote_count:
+      opt.vote_count +
+      (optimisticVote === opt.id && myVote !== opt.id ? 1 : 0) -
+      (myVote === opt.id && optimisticVote !== opt.id ? 1 : 0),
+  }));
+
+  const adjustedTotal = adjustedOptions.reduce((s, o) => s + o.vote_count, 0);
+  const maxVotes = Math.max(...adjustedOptions.map((o) => o.vote_count), 0);
+
+  function handleVote(optionId: string) {
+    if (optimisticVote === optionId) return;
+    setOptimisticVote(optionId);
+    startTransition(async () => {
+      await votePollOption(optionId);
+    });
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.18 }}
+      className="rounded-2xl border bg-card px-4 py-4 space-y-3 card-shadow"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            🎁 Premio para el 🥇
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            Votá tu opción · la ganadora se entrega al cerrar el ranking ·{" "}
+            <span className="font-semibold text-foreground">{adjustedTotal}</span>{" "}
+            {adjustedTotal === 1 ? "voto" : "votos"}
+          </p>
+        </div>
+        {isAdmin && (
+          <button
+            onClick={onEdit}
+            className="shrink-0 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors pt-0.5"
+          >
+            Editar
+          </button>
+        )}
+      </div>
+
+      <ul className="space-y-2">
+        {adjustedOptions.map((opt) => {
+          const isLeading = opt.vote_count === maxVotes && opt.vote_count > 0;
+          const isMyVote = optimisticVote === opt.id;
+          const pct =
+            adjustedTotal > 0
+              ? Math.round((opt.vote_count / adjustedTotal) * 100)
+              : 0;
+
+          return (
+            <li key={opt.id}>
+              <button
+                onClick={() => handleVote(opt.id)}
+                className={`w-full rounded-xl border px-3.5 py-2.5 text-left text-sm transition-all relative overflow-hidden ${
+                  isMyVote
+                    ? "border-foreground bg-foreground text-background"
+                    : "bg-card hover:bg-muted/40"
+                }`}
+              >
+                {adjustedTotal > 0 && (
+                  <div
+                    className={`absolute inset-y-0 left-0 rounded-xl transition-all duration-500 ${
+                      isMyVote ? "bg-background/10" : "bg-foreground/6"
+                    }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                )}
+                <div className="relative flex items-center justify-between gap-2">
+                  <span className="font-medium leading-snug">{opt.option_text}</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isLeading && <span className="text-xs">👑</span>}
+                    {adjustedTotal > 0 && (
+                      <span
+                        className={`text-xs font-bold ${
+                          isMyVote ? "text-background/70" : "text-muted-foreground"
+                        }`}
+                      >
+                        {pct}%
+                      </span>
+                    )}
+                    {isMyVote && (
+                      <Check size={12} className="text-background/80" />
+                    )}
+                  </div>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </motion.div>
+  );
+}
+
+function PollModal({
+  currentOptions,
+  onClose,
+}: {
+  currentOptions: { id: string; option_text: string; vote_count: number }[];
+  onClose: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    startTransition(async () => {
+      const result = await savePollOptions(null, fd);
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        onClose();
+      }
+    });
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm px-4"
+      style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <motion.div
+        initial={{ y: 80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 80, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 420, damping: 36 }}
+        className="w-full max-w-md rounded-3xl border bg-card p-6 space-y-5"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-0.5">
+            <h2 className="font-bold text-base">Encuesta de premio 🎁</h2>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Los miembros votan y la opción más votada se entrega al 1er puesto al cerrar el ranking
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-3">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground w-5 text-center font-bold shrink-0">
+                {i}
+              </span>
+              <input
+                name={`option_${i}`}
+                defaultValue={currentOptions[i - 1]?.option_text ?? ""}
+                placeholder={
+                  i === 1
+                    ? "Ej: Elige la cena del viernes"
+                    : i === 2
+                    ? "Ej: Día libre de tareas"
+                    : `Opción ${i}${i > 2 ? " (opcional)" : ""}`
+                }
+                required={i <= 2}
+                className="flex-1 rounded-xl border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground/60 outline-none focus:ring-1 focus:ring-foreground/20"
+              />
+            </div>
+          ))}
+
+          {currentOptions.length > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              ⚠️ Al guardar, los votos anteriores se reinician.
+            </p>
+          )}
+
+          {error && <p className="text-destructive text-xs">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="w-full rounded-xl bg-foreground text-background py-2.5 text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5"
+          >
+            {pending ? "Guardando..." : <><Check size={14} /> Guardar encuesta</>}
+          </button>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 function ConfigModal({
   settings,
   prizes,
@@ -490,7 +741,8 @@ function ConfigModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm px-4 pb-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm px-4"
+      style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div

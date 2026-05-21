@@ -106,7 +106,7 @@ export default function InviteModal({ members, isAdmin, currentUserId }: Props) 
               exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 400, damping: 40 }}
               className="fixed bottom-0 left-0 right-0 z-50 bg-background rounded-t-3xl p-6 space-y-6 max-w-md mx-auto shadow-2xl"
-              style={{ paddingBottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}
+              style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
             >
               <div className="flex justify-center">
                 <div className="w-9 h-1 rounded-full bg-muted" />

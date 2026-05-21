@@ -233,7 +233,7 @@ export default function SavingsList({ goals }: Props) {
             >
               <div
                 className="w-full max-w-md rounded-t-3xl border bg-card px-5 pt-5 pb-8 space-y-5"
-                style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+                style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
               >
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-base">Nueva meta de ahorro</h2>
@@ -309,7 +309,7 @@ export default function SavingsList({ goals }: Props) {
             >
               <div
                 className="w-full max-w-md rounded-t-3xl border bg-card px-5 pt-5 pb-8 space-y-5"
-                style={{ paddingBottom: "calc(6rem + env(safe-area-inset-bottom))" }}
+                style={{ paddingBottom: "calc(8rem + env(safe-area-inset-bottom))" }}
               >
                 <div className="flex items-center justify-between">
                   <h2 className="font-semibold text-base">

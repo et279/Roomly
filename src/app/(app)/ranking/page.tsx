@@ -33,7 +33,7 @@ export default async function RankingPage() {
 
   if (!homeId) redirect("/create-home");
 
-  const raw = await getRankingData(homeId);
+  const raw = await getRankingData(homeId, user.id);
 
   // Get all home members for display
   const { data: allMemberRows } = await admin

@@ -370,6 +370,40 @@ export async function closePeriod(periodId: string) {
     );
   }
 
+  // Apply winning poll option as 1st place prize if a poll exists
+  const { data: pollOpts } = await admin
+    .from("prize_poll_options")
+    .select("id, option_text")
+    .eq("period_id", periodId);
+
+  if (pollOpts?.length) {
+    const voteCounts = await Promise.all(
+      pollOpts.map((opt) =>
+        admin
+          .from("prize_poll_votes")
+          .select("*", { count: "exact", head: true })
+          .eq("option_id", opt.id),
+      ),
+    );
+
+    let maxVotes = -1;
+    let winningText = "";
+    pollOpts.forEach((opt, i) => {
+      const count = voteCounts[i].count ?? 0;
+      if (count > maxVotes) {
+        maxVotes = count;
+        winningText = opt.option_text;
+      }
+    });
+
+    if (winningText) {
+      await admin.from("ranking_prizes").upsert(
+        { period_id: periodId, rank: 1, prize_description: winningText },
+        { onConflict: "period_id,rank" },
+      );
+    }
+  }
+
   await admin
     .from("ranking_periods")
     .update({ status: "closed" })
@@ -379,9 +413,82 @@ export async function closePeriod(periodId: string) {
   return { success: true };
 }
 
+export async function savePollOptions(_: unknown, formData: FormData) {
+  const user = await getUser();
+  const admin = createAdminClient();
+  const result = await requireAdmin(admin, user.id);
+  if ("error" in result) return result;
+
+  const today = new Date().toISOString().split("T")[0];
+  const { data: period } = await admin
+    .from("ranking_periods")
+    .select("id")
+    .eq("home_id", result.homeId)
+    .eq("status", "active")
+    .lte("start_date", today)
+    .gte("end_date", today)
+    .maybeSingle();
+
+  if (!period) return { error: "No hay período activo aún" };
+
+  const options = [1, 2, 3, 4]
+    .map((i) => ((formData.get(`option_${i}`) as string) ?? "").trim())
+    .filter((t) => t.length > 0)
+    .map((option_text) => ({
+      period_id: period.id,
+      home_id: result.homeId,
+      option_text,
+      created_by: user.id,
+    }));
+
+  if (options.length < 2) return { error: "Necesitás al menos 2 opciones" };
+
+  // Delete old options (votes cascade)
+  await admin.from("prize_poll_options").delete().eq("period_id", period.id);
+  await admin.from("prize_poll_options").insert(options);
+
+  revalidatePath("/ranking");
+  return { success: true };
+}
+
+export async function votePollOption(optionId: string) {
+  const user = await getUser();
+  const admin = createAdminClient();
+
+  const { data: option } = await admin
+    .from("prize_poll_options")
+    .select("period_id, home_id")
+    .eq("id", optionId)
+    .single();
+
+  if (!option) return { error: "Opción no válida" };
+
+  const { data: membership } = await admin
+    .from("home_members")
+    .select("id")
+    .eq("home_id", option.home_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership) return { error: "No pertenecés a este hogar" };
+
+  await admin.from("prize_poll_votes").upsert(
+    {
+      option_id: optionId,
+      period_id: option.period_id,
+      user_id: user.id,
+      home_id: option.home_id,
+    },
+    { onConflict: "period_id,user_id" },
+  );
+
+  revalidatePath("/ranking");
+  return { success: true };
+}
+
 // ── Data fetching ────────────────────────────────────────────────────────────
 
-export async function getRankingData(homeId: string) {
+export async function getRankingData(homeId: string, userId?: string) {
   const admin = createAdminClient();
   const today = new Date().toISOString().split("T")[0];
 
@@ -411,24 +518,58 @@ export async function getRankingData(homeId: string) {
 
   let scores = null;
   let prizes = null;
+  let pollOptions: { id: string; option_text: string; vote_count: number }[] = [];
+  let myVote: string | null = null;
 
   if (activePeriod) {
-    const [{ data: scoresData }, { data: prizesData }] = await Promise.all([
-      admin
-        .from("period_scores")
-        .select(
-          "user_id, tasks_points, shopping_points, finance_points, achievement_points, total_points, profiles(name)",
-        )
-        .eq("period_id", activePeriod.id)
-        .order("total_points", { ascending: false }),
-      admin
-        .from("ranking_prizes")
-        .select("rank, prize_description")
-        .eq("period_id", activePeriod.id)
-        .order("rank"),
-    ]);
+    const [{ data: scoresData }, { data: prizesData }, { data: pollOpts }, { data: myVoteRow }] =
+      await Promise.all([
+        admin
+          .from("period_scores")
+          .select(
+            "user_id, tasks_points, shopping_points, finance_points, achievement_points, total_points, profiles(name)",
+          )
+          .eq("period_id", activePeriod.id)
+          .order("total_points", { ascending: false }),
+        admin
+          .from("ranking_prizes")
+          .select("rank, prize_description")
+          .eq("period_id", activePeriod.id)
+          .order("rank"),
+        admin
+          .from("prize_poll_options")
+          .select("id, option_text")
+          .eq("period_id", activePeriod.id)
+          .order("created_at"),
+        userId
+          ? admin
+              .from("prize_poll_votes")
+              .select("option_id")
+              .eq("period_id", activePeriod.id)
+              .eq("user_id", userId)
+              .maybeSingle()
+          : Promise.resolve({ data: null }),
+      ]);
+
     scores = scoresData;
     prizes = prizesData;
+    myVote = (myVoteRow as { option_id: string } | null)?.option_id ?? null;
+
+    if (pollOpts?.length) {
+      const voteCounts = await Promise.all(
+        pollOpts.map((opt) =>
+          admin
+            .from("prize_poll_votes")
+            .select("*", { count: "exact", head: true })
+            .eq("option_id", opt.id),
+        ),
+      );
+      pollOptions = pollOpts.map((opt, i) => ({
+        id: opt.id,
+        option_text: opt.option_text,
+        vote_count: voteCounts[i].count ?? 0,
+      }));
+    }
   }
 
   // Past periods scores (for history)
@@ -449,7 +590,7 @@ export async function getRankingData(homeId: string) {
     });
   }
 
-  return { settings, activePeriod, pastPeriods: pastPeriods ?? [], scores, prizes, pastScores };
+  return { settings, activePeriod, pastPeriods: pastPeriods ?? [], scores, prizes, pastScores, pollOptions, myVote };
 }
 
 export async function getAchievementsData(
