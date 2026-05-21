@@ -27,6 +27,21 @@ function buildSupabaseMock(userId: string) {
   };
 }
 
+const OWNER_PERMISSIONS = [
+  "manage_home", "manage_members", "manage_roles", "manage_invites",
+  "create_task", "edit_task", "delete_task",
+  "view_finances", "edit_finances",
+  "manage_gamification", "view_ranking",
+  "create_shopping", "edit_shopping",
+];
+
+const MEMBER_PERMISSIONS = [
+  "create_task", "edit_task", "delete_task",
+  "view_finances", "edit_finances",
+  "create_shopping", "edit_shopping",
+  "view_ranking", "manage_invites",
+];
+
 function buildAdminMock(membershipData: unknown) {
   return {
     from: vi.fn(() => ({
@@ -38,13 +53,18 @@ function buildAdminMock(membershipData: unknown) {
 }
 
 describe("getCurrentContext", () => {
-  it("returns admin role when user is the home creator", async () => {
+  it("returns Owner role and all permissions when user has Owner role", async () => {
     vi.mocked(createClient).mockResolvedValue(buildSupabaseMock("creator-1") as never);
     vi.mocked(createAdminClient).mockReturnValue(
       buildAdminMock({
         id: "member-1",
         home_id: "home-1",
         homes: { name: "My Home", created_by: "creator-1" },
+        roles: {
+          id: "role-owner",
+          name: "Owner",
+          role_permissions: OWNER_PERMISSIONS.map((key) => ({ permissions: { key } })),
+        },
       }) as never,
     );
 
@@ -54,27 +74,54 @@ describe("getCurrentContext", () => {
     expect(ctx.user.id).toBe("creator-1");
     expect(ctx.home.id).toBe("home-1");
     expect(ctx.home.name).toBe("My Home");
-    expect(ctx.membership.role).toBe("admin");
-    expect(ctx.permissions).toContain("admin");
-    expect(ctx.permissions).toContain("member");
+    expect(ctx.membership.role).toEqual({ id: "role-owner", name: "Owner" });
+    expect(ctx.permissions).toContain("manage_home");
+    expect(ctx.permissions).toContain("manage_gamification");
+    expect(ctx.permissions).toContain("manage_roles");
+    expect(ctx.permissions).toHaveLength(OWNER_PERMISSIONS.length);
   });
 
-  it("returns null role when user is a regular member", async () => {
+  it("returns Member role and limited permissions for regular members", async () => {
     vi.mocked(createClient).mockResolvedValue(buildSupabaseMock("member-user") as never);
     vi.mocked(createAdminClient).mockReturnValue(
       buildAdminMock({
         id: "member-2",
         home_id: "home-1",
         homes: { name: "Shared Home", created_by: "someone-else" },
+        roles: {
+          id: "role-member",
+          name: "Member",
+          role_permissions: MEMBER_PERMISSIONS.map((key) => ({ permissions: { key } })),
+        },
       }) as never,
     );
 
     const { getCurrentContext: getCtx } = await import("@/lib/context/context.service");
     const ctx = await getCtx();
 
+    expect(ctx.membership.role).toEqual({ id: "role-member", name: "Member" });
+    expect(ctx.permissions).toContain("create_task");
+    expect(ctx.permissions).toContain("edit_finances");
+    expect(ctx.permissions).not.toContain("manage_home");
+    expect(ctx.permissions).not.toContain("manage_roles");
+  });
+
+  it("returns null role and empty permissions when role_id is null", async () => {
+    vi.mocked(createClient).mockResolvedValue(buildSupabaseMock("no-role-user") as never);
+    vi.mocked(createAdminClient).mockReturnValue(
+      buildAdminMock({
+        id: "member-3",
+        home_id: "home-1",
+        homes: { name: "Some Home", created_by: "someone-else" },
+        roles: null,
+      }) as never,
+    );
+
+    const { getCurrentContext: getCtx2 } = await import("@/lib/context/context.service");
+    const ctx = await getCtx2();
+
     expect(ctx.membership.role).toBeNull();
-    expect(ctx.permissions).not.toContain("admin");
-    expect(ctx.permissions).toContain("member");
+    expect(ctx.permissions).toHaveLength(0);
   });
 
   it("redirects to /create-home when user has no membership", async () => {
@@ -83,8 +130,8 @@ describe("getCurrentContext", () => {
       buildAdminMock(null) as never,
     );
 
-    const { getCurrentContext: getCtx2 } = await import("@/lib/context/context.service");
+    const { getCurrentContext: getCtx3 } = await import("@/lib/context/context.service");
 
-    await expect(getCtx2()).rejects.toThrow("REDIRECT:/create-home");
+    await expect(getCtx3()).rejects.toThrow("REDIRECT:/create-home");
   });
 });

@@ -11,11 +11,12 @@ type Member = { user_id: string; name: string };
 
 type Props = {
   members: Member[];
-  isAdmin: boolean;
+  canManageInvites: boolean;
+  canManageMembers: boolean;
   currentUserId: string;
 };
 
-export default function InviteModal({ members, isAdmin, currentUserId }: Props) {
+export default function InviteModal({ members, canManageInvites, canManageMembers, currentUserId }: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -78,13 +79,15 @@ export default function InviteModal({ members, isAdmin, currentUserId }: Props) 
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <UserPlus size={13} strokeWidth={2} />
-        Invitar
-      </button>
+      {canManageInvites && (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <UserPlus size={13} strokeWidth={2} />
+          Invitar
+        </button>
+      )}
 
       <AnimatePresence>
         {open && (
@@ -150,7 +153,7 @@ export default function InviteModal({ members, isAdmin, currentUserId }: Props) 
                             Tú
                           </span>
                         )}
-                        {isAdmin && m.user_id !== currentUserId && (
+                        {canManageMembers && m.user_id !== currentUserId && (
                           <>
                             {confirmId === m.user_id ? (
                               <div className="flex items-center gap-1.5 shrink-0">

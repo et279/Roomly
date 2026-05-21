@@ -40,3 +40,26 @@ export type ScoreWithProfile = {
   total_points: number;
   profiles: { name: string } | null;
 };
+
+// Fase 3: join with role + nested permissions via role_permissions
+export type HomeMemberWithRoleAndPermissions = {
+  id: string;
+  home_id: string;
+  homes: { name: string; created_by: string } | null;
+  roles: {
+    id: string;
+    name: string;
+    role_permissions: Array<{
+      permissions: { key: string } | null;
+    }>;
+  } | null;
+};
+
+// Fase 3: member row including role for the roles panel
+export type MemberWithRole = {
+  id: string;
+  user_id: string;
+  role_id: string | null;
+  profiles: { name: string } | null;
+  roles: { id: string; name: string } | null;
+};

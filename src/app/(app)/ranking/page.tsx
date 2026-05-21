@@ -1,42 +1,25 @@
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentContext } from "@/lib/context/context";
+import { Permission } from "@/lib/security/permissions";
 import { getRankingData } from "@/lib/actions/gamification";
 import RankingContent from "./_components/RankingContent";
-import type { HomeMemberWithHome, MemberWithProfile } from "@/types/database";
+import type { MemberWithProfile } from "@/types/database";
 
 export default async function RankingPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const ctx = await getCurrentContext();
+  const { user, home, permissions, admin } = ctx;
 
-  const admin = createAdminClient();
-  const [{ data: membershipRows }, { data: memberRows }] = await Promise.all([
+  const isAdmin = permissions.includes(Permission.MANAGE_GAMIFICATION);
+
+  const [raw, { data: memberRows }, { data: profileRow }] = await Promise.all([
+    getRankingData(home.id, user.id),
     admin
       .from("home_members")
-      .select("id, home_id, homes(name, created_by)")
-      .eq("user_id", user.id)
-      .limit(1),
+      .select("user_id, profiles(name)")
+      .eq("home_id", home.id),
     admin.from("profiles").select("id, name").eq("id", user.id).single(),
   ]);
 
-  const membershipRow = (membershipRows?.[0] ?? null) as HomeMemberWithHome | null;
-  const homeInfo = membershipRow?.homes ?? null;
-  const homeId = membershipRow?.home_id;
-  const isAdmin = homeInfo?.created_by === user.id;
-
-  if (!homeId) redirect("/create-home");
-
-  const raw = await getRankingData(homeId, user.id);
-
-  const { data: allMemberRows } = await admin
-    .from("home_members")
-    .select("user_id, profiles(name)")
-    .eq("home_id", homeId);
-
-  const members = (allMemberRows as MemberWithProfile[] ?? []).map((m) => ({
+  const members = ((memberRows as MemberWithProfile[]) ?? []).map((m) => ({
     user_id: m.user_id,
     name: m.profiles?.name ?? "",
   }));
@@ -61,9 +44,9 @@ export default async function RankingPage() {
       {...rankingData}
       isAdmin={isAdmin}
       currentUserId={user.id}
-      homeId={homeId}
+      homeId={home.id}
       members={members}
-      currentUserName={memberRows?.name ?? ""}
+      currentUserName={profileRow?.name ?? ""}
     />
   );
 }

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/context/context";
+import { hasPermission } from "@/lib/security/authorization";
+import { Permission } from "@/lib/security/permissions";
 import { resolveContributionStatus, applyContributionPayment } from "@/lib/services/FinanceService";
 import type { ContributionStatus } from "@/types";
 
@@ -16,6 +18,8 @@ export async function createContribution(_: unknown, formData: FormData) {
     return { error: "Usuario, monto y fecha son requeridos" };
 
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES))
+    return { error: "Sin permiso para registrar contribuciones" };
 
   const { error } = await ctx.admin.from("house_contributions").insert({
     home_id: ctx.home.id,
@@ -36,6 +40,7 @@ export async function createContribution(_: unknown, formData: FormData) {
 
 export async function updateContributionPayment(id: string, paidAmount: number) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
 
   const { data: contrib } = await ctx.admin
     .from("house_contributions")
@@ -54,6 +59,8 @@ export async function updateContributionPayment(id: string, paidAmount: number) 
 
 export async function deleteContribution(id: string) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
+
   await ctx.admin
     .from("house_contributions")
     .delete()

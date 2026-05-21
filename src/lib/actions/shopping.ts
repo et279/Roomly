@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/context/context";
+import { hasPermission } from "@/lib/security/authorization";
+import { Permission } from "@/lib/security/permissions";
 import { toggleShoppingItem as performToggle } from "@/lib/services/ShoppingService";
 
 export async function createShoppingItem(_: unknown, formData: FormData) {
@@ -11,6 +13,8 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
   if (!title) return { error: "El nombre no puede estar vacío" };
 
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.CREATE_SHOPPING))
+    return { error: "Sin permiso para agregar ítems" };
 
   const { error } = await ctx.admin.from("shopping_items").insert({
     home_id: ctx.home.id,
@@ -28,6 +32,7 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
 
 export async function toggleShoppingItem(id: string, done: boolean) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_SHOPPING)) return;
 
   const { data: item } = await ctx.admin
     .from("shopping_items")
@@ -46,6 +51,8 @@ export async function toggleShoppingItem(id: string, done: boolean) {
 
 export async function deleteShoppingItem(id: string) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_SHOPPING)) return;
+
   await ctx.admin
     .from("shopping_items")
     .delete()

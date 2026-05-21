@@ -1,36 +1,26 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentContext } from "@/lib/context/context";
+import { canManageRoles } from "@/lib/security/authorization";
 import { signOut } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Home, Mail, LogOut } from "lucide-react";
+import { Home, Mail, LogOut, Shield, ChevronRight } from "lucide-react";
 import { ChangeNameForm } from "./_components/ChangeNameForm";
 import { ChangePasswordForm } from "./_components/ChangePasswordForm";
-import type { HomeMemberWithHomeName } from "@/types/database";
 
 export default async function ProfilePage() {
+  const ctx = await getCurrentContext();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("name, email")
-    .eq("id", user.id)
+    .eq("id", ctx.user.id)
     .single();
 
-  const { data: membershipRaw } = await supabase
-    .from("home_members")
-    .select("homes(name)")
-    .eq("user_id", user.id)
-    .single();
-
-  const membership = membershipRaw as HomeMemberWithHomeName | null;
-  const homeName = membership?.homes?.name ?? "Sin hogar";
-
+  const showRolesLink = canManageRoles(ctx);
+  const homeName = ctx.home.name;
   const name = profile?.name ?? "—";
   const initials = name
     .split(" ")
@@ -65,7 +55,7 @@ export default async function ProfilePage() {
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Email</p>
               <p className="text-sm font-medium truncate">
-                {profile?.email ?? user.email}
+                {profile?.email ?? ctx.user.email}
               </p>
             </div>
           </div>
@@ -77,6 +67,19 @@ export default async function ProfilePage() {
               <p className="text-sm font-medium truncate">{homeName}</p>
             </div>
           </div>
+          {showRolesLink && (
+            <>
+              <div className="h-px bg-border mx-4" />
+              <Link href="/settings/roles" className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors">
+                <Shield size={16} className="text-muted-foreground shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Administración</p>
+                  <p className="text-sm font-medium">Roles y permisos</p>
+                </div>
+                <ChevronRight size={16} className="text-muted-foreground ml-auto shrink-0" />
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Seguridad */}

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/context/context";
+import { hasPermission } from "@/lib/security/authorization";
+import { Permission } from "@/lib/security/permissions";
 import type { FinancialRecordType } from "@/types";
 
 export async function createFinancialRecord(_: unknown, formData: FormData) {
@@ -17,6 +19,8 @@ export async function createFinancialRecord(_: unknown, formData: FormData) {
     return { error: "Tipo y monto son requeridos" };
 
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES))
+    return { error: "Sin permiso para registrar movimientos financieros" };
 
   const { error } = await ctx.admin.from("financial_records").insert({
     home_id: ctx.home.id,
@@ -46,6 +50,7 @@ export async function updateFinancialRecord(
   },
 ) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
 
   await ctx.admin
     .from("financial_records")
@@ -59,6 +64,7 @@ export async function updateFinancialRecord(
 
 export async function deleteFinancialRecord(id: string) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
 
   await ctx.admin
     .from("financial_records")

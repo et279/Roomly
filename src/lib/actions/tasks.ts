@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/context/context";
+import { hasPermission } from "@/lib/security/authorization";
+import { Permission } from "@/lib/security/permissions";
 import { completeTask, uncompleteTask } from "@/lib/services/TaskService";
 import type { Recurrence } from "@/types";
 
@@ -14,6 +16,8 @@ export async function createTask(_: unknown, formData: FormData) {
   if (!title) return { error: "El título no puede estar vacío" };
 
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.CREATE_TASK))
+    return { error: "Sin permiso para crear tareas" };
 
   const { error } = await ctx.admin.from("tasks").insert({
     home_id: ctx.home.id,
@@ -33,6 +37,7 @@ export async function createTask(_: unknown, formData: FormData) {
 
 export async function toggleTask(id: string, done: boolean) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_TASK)) return;
 
   const { data: task } = await ctx.admin
     .from("tasks")
@@ -62,6 +67,7 @@ export async function updateTask(
   },
 ) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_TASK)) return;
 
   const payload: Record<string, unknown> = {};
 
@@ -107,6 +113,8 @@ export async function updateTask(
 
 export async function deleteTask(id: string) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.DELETE_TASK)) return;
+
   await ctx.admin
     .from("tasks")
     .delete()

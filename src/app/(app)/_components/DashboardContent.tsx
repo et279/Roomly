@@ -25,7 +25,8 @@ type Props = {
   tasksPendingCount: number;
   shoppingPendingCount: number;
   memberStats: MemberStat[];
-  isAdmin: boolean;
+  canManageInvites: boolean;
+  canManageMembers: boolean;
   currentUserId: string;
 };
 
@@ -59,7 +60,8 @@ export default function DashboardContent({
   tasksPendingCount,
   shoppingPendingCount,
   memberStats,
-  isAdmin,
+  canManageInvites,
+  canManageMembers,
   currentUserId,
 }: Props) {
   const sortedMembers = [...memberStats].sort((a, b) => b.done - a.done);
@@ -95,7 +97,8 @@ export default function DashboardContent({
                 user_id: m.user_id,
                 name: m.name,
               }))}
-              isAdmin={isAdmin}
+              canManageInvites={canManageInvites}
+              canManageMembers={canManageMembers}
               currentUserId={currentUserId}
             />
           </div>

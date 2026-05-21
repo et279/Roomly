@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentContext } from "@/lib/context/context";
+import { hasPermission } from "@/lib/security/authorization";
+import { Permission } from "@/lib/security/permissions";
 
 export async function createSavingGoal(_: unknown, formData: FormData) {
   const name = (formData.get("name") as string)?.trim();
@@ -15,6 +17,8 @@ export async function createSavingGoal(_: unknown, formData: FormData) {
     return { error: "Nombre y monto objetivo son requeridos" };
 
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES))
+    return { error: "Sin permiso para gestionar metas de ahorro" };
 
   const { error } = await ctx.admin.from("saving_goals").insert({
     home_id: ctx.home.id,
@@ -33,6 +37,7 @@ export async function createSavingGoal(_: unknown, formData: FormData) {
 
 export async function addToSavingGoal(id: string, additionalAmount: number) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
 
   const { data: goal } = await ctx.admin
     .from("saving_goals")
@@ -62,6 +67,7 @@ export async function updateSavingGoal(
   updates: { name?: string; target_amount?: number; deadline?: string | null },
 ) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
 
   await ctx.admin
     .from("saving_goals")
@@ -75,6 +81,8 @@ export async function updateSavingGoal(
 
 export async function deleteSavingGoal(id: string) {
   const ctx = await getCurrentContext();
+  if (!hasPermission(ctx, Permission.EDIT_FINANCES)) return;
+
   await ctx.admin
     .from("saving_goals")
     .delete()

@@ -42,6 +42,15 @@ function buildAdminMockForClose(rpcResult: unknown) {
               id: "member-1",
               home_id: "home-1",
               homes: { name: "Test Home", created_by: "admin-user-1" },
+              roles: {
+                id: "role-owner",
+                name: "Owner",
+                role_permissions: [
+                  { permissions: { key: "manage_gamification" } },
+                  { permissions: { key: "manage_home" } },
+                  { permissions: { key: "manage_roles" } },
+                ],
+              },
             },
           }),
           single: vi.fn().mockResolvedValue({ data: null }),
@@ -106,6 +115,15 @@ describe("closePeriod — delegates to close_period_atomic RPC", () => {
                 id: "member-1",
                 home_id: "home-1",
                 homes: { name: "Test Home", created_by: "admin-user-1" },
+                roles: {
+                  id: "role-owner",
+                  name: "Owner",
+                  role_permissions: [
+                    { permissions: { key: "manage_gamification" } },
+                    { permissions: { key: "manage_home" } },
+                    { permissions: { key: "manage_roles" } },
+                  ],
+                },
               },
             }),
             single: vi.fn().mockResolvedValue({ data: null }),
