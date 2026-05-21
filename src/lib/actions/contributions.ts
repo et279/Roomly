@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger/logger";
 import type { ContributionStatus } from "@/types";
 import { awardFinancePoints } from "@/lib/actions/gamification";
 
@@ -62,12 +63,15 @@ export async function createContribution(_: unknown, formData: FormData) {
 }
 
 export async function updateContributionPayment(id: string, paidAmount: number) {
-  const { admin } = await getUserAndHome();
+  const { admin, homeId } = await getUserAndHome();
+  if (!homeId) return;
 
+  // home_id filter on read verifies ownership
   const { data: contrib } = await admin
     .from("house_contributions")
-    .select("amount, due_date")
+    .select("amount, due_date, user_id, home_id")
     .eq("id", id)
+    .eq("home_id", homeId)
     .single();
 
   if (!contrib) return;
@@ -80,14 +84,13 @@ export async function updateContributionPayment(id: string, paidAmount: number) 
     .eq("id", id);
 
   if (status === "paid") {
-    const { data: full } = await admin
-      .from("house_contributions")
-      .select("user_id, home_id")
-      .eq("id", id)
-      .single();
-    if (full) {
-      awardFinancePoints(full.user_id, full.home_id).catch(() => {});
-    }
+    awardFinancePoints(contrib.user_id, contrib.home_id).catch((e) =>
+      logger.error("gamification", "awardFinancePoints failed", {
+        userId: contrib.user_id,
+        homeId: contrib.home_id,
+        error: e,
+      }),
+    );
   }
 
   revalidatePath("/finance");
@@ -95,8 +98,13 @@ export async function updateContributionPayment(id: string, paidAmount: number) 
 }
 
 export async function deleteContribution(id: string) {
-  const { admin } = await getUserAndHome();
-  await admin.from("house_contributions").delete().eq("id", id);
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+  await admin
+    .from("house_contributions")
+    .delete()
+    .eq("id", id)
+    .eq("home_id", homeId);
   revalidatePath("/finance");
   revalidatePath("/finance/contributions");
 }

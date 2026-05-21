@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger/logger";
 import type { PeriodType, AchievementWithStatus, ActivityCounters } from "@/types";
 
 async function getUser() {
@@ -93,6 +94,7 @@ async function getOrCreateActivePeriod(admin: AdminClient, homeId: string) {
   return newPeriod;
 }
 
+// Uses RPC increment_period_score (migration 010) for atomic increments — no race condition
 async function upsertPeriodScore(
   admin: AdminClient,
   periodId: string,
@@ -105,33 +107,23 @@ async function upsertPeriodScore(
     achievement_points?: number;
   },
 ) {
-  const { data: current } = await admin
-    .from("period_scores")
-    .select("tasks_points, shopping_points, finance_points, achievement_points")
-    .eq("period_id", periodId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { error } = await admin.rpc("increment_period_score", {
+    p_period_id: periodId,
+    p_home_id: homeId,
+    p_user_id: userId,
+    p_tasks_points: increment.tasks_points ?? 0,
+    p_shopping_points: increment.shopping_points ?? 0,
+    p_finance_points: increment.finance_points ?? 0,
+    p_achievement_points: increment.achievement_points ?? 0,
+  });
 
-  const tasks_points = (current?.tasks_points ?? 0) + (increment.tasks_points ?? 0);
-  const shopping_points = (current?.shopping_points ?? 0) + (increment.shopping_points ?? 0);
-  const finance_points = (current?.finance_points ?? 0) + (increment.finance_points ?? 0);
-  const achievement_points = (current?.achievement_points ?? 0) + (increment.achievement_points ?? 0);
-  const total_points = tasks_points + shopping_points + finance_points + achievement_points;
-
-  await admin.from("period_scores").upsert(
-    {
-      period_id: periodId,
-      home_id: homeId,
-      user_id: userId,
-      tasks_points,
-      shopping_points,
-      finance_points,
-      achievement_points,
-      total_points,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "period_id,user_id" },
-  );
+  if (error) {
+    logger.error("gamification", "upsertPeriodScore RPC failed", {
+      userId,
+      homeId,
+      error,
+    });
+  }
 }
 
 async function checkAndAwardAchievements(
@@ -326,88 +318,37 @@ export async function savePrizes(_: unknown, formData: FormData) {
   return { success: true };
 }
 
+// Uses close_period_atomic RPC (migration 010) — rank assignment + period close in one transaction
 export async function closePeriod(periodId: string) {
   const user = await getUser();
   const admin = createAdminClient();
 
-  const { data: periodRow } = await admin
-    .from("ranking_periods")
-    .select("home_id, homes(created_by)")
-    .eq("id", periodId)
-    .single();
+  const { data: result, error } = await admin.rpc("close_period_atomic", {
+    p_period_id: periodId,
+    p_requesting_user_id: user.id,
+  });
 
-  const periodData = periodRow as unknown as {
-    home_id: string;
-    homes: { created_by: string };
-  } | null;
+  if (error) {
+    logger.error("gamification", "close_period_atomic RPC failed", {
+      userId: user.id,
+      error,
+    });
+    return { error: "Error al cerrar el período" };
+  }
 
-  if (!periodData) return { error: "Período no encontrado" };
-  if (periodData.homes.created_by !== user.id)
-    return { error: "Solo el admin puede cerrar el período" };
+  const rpcResult = result as { error?: string; success?: boolean; winner_id?: string; home_id?: string } | null;
 
-  const { data: scores } = await admin
-    .from("period_scores")
-    .select("id, user_id, total_points")
-    .eq("period_id", periodId)
-    .order("total_points", { ascending: false });
+  if (rpcResult?.error) return { error: rpcResult.error };
 
-  if (scores?.length) {
-    await Promise.all(
-      scores.map((s, i) =>
-        admin
-          .from("period_scores")
-          .update({ final_rank: i + 1 })
-          .eq("id", s.id),
-      ),
-    );
-
-    // Award "periods_won" achievements to winner
+  // Award achievements to winner (done outside the transaction — idempotent)
+  if (rpcResult?.winner_id && rpcResult?.home_id) {
     await checkAndAwardAchievements(
       admin,
-      scores[0].user_id,
-      periodData.home_id,
+      rpcResult.winner_id,
+      rpcResult.home_id,
       null,
     );
   }
-
-  // Apply winning poll option as 1st place prize if a poll exists
-  const { data: pollOpts } = await admin
-    .from("prize_poll_options")
-    .select("id, option_text")
-    .eq("period_id", periodId);
-
-  if (pollOpts?.length) {
-    const voteCounts = await Promise.all(
-      pollOpts.map((opt) =>
-        admin
-          .from("prize_poll_votes")
-          .select("*", { count: "exact", head: true })
-          .eq("option_id", opt.id),
-      ),
-    );
-
-    let maxVotes = -1;
-    let winningText = "";
-    pollOpts.forEach((opt, i) => {
-      const count = voteCounts[i].count ?? 0;
-      if (count > maxVotes) {
-        maxVotes = count;
-        winningText = opt.option_text;
-      }
-    });
-
-    if (winningText) {
-      await admin.from("ranking_prizes").upsert(
-        { period_id: periodId, rank: 1, prize_description: winningText },
-        { onConflict: "period_id,rank" },
-      );
-    }
-  }
-
-  await admin
-    .from("ranking_periods")
-    .update({ status: "closed" })
-    .eq("id", periodId);
 
   revalidatePath("/ranking");
   return { success: true };
@@ -522,7 +463,7 @@ export async function getRankingData(homeId: string, userId?: string) {
   let myVote: string | null = null;
 
   if (activePeriod) {
-    const [{ data: scoresData }, { data: prizesData }, { data: pollOpts }, { data: myVoteRow }] =
+    const [{ data: scoresData }, { data: prizesData }, { data: pollOpts }, { data: myVoteRow }, { data: allVotes }] =
       await Promise.all([
         admin
           .from("period_scores")
@@ -549,6 +490,11 @@ export async function getRankingData(homeId: string, userId?: string) {
               .eq("user_id", userId)
               .maybeSingle()
           : Promise.resolve({ data: null }),
+        // Single query for all votes — replaces N+1 pattern (fixes KI-014)
+        admin
+          .from("prize_poll_votes")
+          .select("option_id")
+          .eq("period_id", activePeriod.id),
       ]);
 
     scores = scoresData;
@@ -556,18 +502,16 @@ export async function getRankingData(homeId: string, userId?: string) {
     myVote = (myVoteRow as { option_id: string } | null)?.option_id ?? null;
 
     if (pollOpts?.length) {
-      const voteCounts = await Promise.all(
-        pollOpts.map((opt) =>
-          admin
-            .from("prize_poll_votes")
-            .select("*", { count: "exact", head: true })
-            .eq("option_id", opt.id),
-        ),
-      );
-      pollOptions = pollOpts.map((opt, i) => ({
+      // Count votes in JS from the single fetched set
+      const voteMap = new Map<string, number>();
+      (allVotes ?? []).forEach((v) => {
+        voteMap.set(v.option_id, (voteMap.get(v.option_id) ?? 0) + 1);
+      });
+
+      pollOptions = pollOpts.map((opt) => ({
         id: opt.id,
         option_text: opt.option_text,
-        vote_count: voteCounts[i].count ?? 0,
+        vote_count: voteMap.get(opt.id) ?? 0,
       }));
     }
   }

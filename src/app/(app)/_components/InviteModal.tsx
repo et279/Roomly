@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, UserPlus, Copy, Check, MessageCircle, Link2, Trash2 } from "lucide-react";
 import { createInviteLink, inviteMember, removeMember } from "@/lib/actions/home";
@@ -32,13 +32,16 @@ export default function InviteModal({ members, isAdmin, currentUserId }: Props) 
   );
   const [invitedEmails, setInvitedEmails] = useState<string[]>([]);
 
-  if (
-    emailState?.success &&
-    emailState.email &&
-    !invitedEmails.includes(emailState.email)
-  ) {
-    setInvitedEmails((prev) => [...prev, emailState.email as string]);
-  }
+  // useEffect avoids setState during render which can cause loops in strict mode (KI-018)
+  useEffect(() => {
+    if (emailState?.success && emailState.email) {
+      setInvitedEmails((prev) =>
+        prev.includes(emailState.email as string)
+          ? prev
+          : [...prev, emailState.email as string],
+      );
+    }
+  }, [emailState]);
 
   const inviteUrl = linkState?.token
     ? `${window.location.origin}/join/${linkState.token}`
@@ -48,16 +51,11 @@ export default function InviteModal({ members, isAdmin, currentUserId }: Props) 
     if (!inviteUrl) return;
     try {
       await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
     } catch {
-      const el = document.createElement("textarea");
-      el.value = inviteUrl;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
+      // Clipboard API unavailable — URL is visible in the input for manual copy
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
   };
 
   const whatsappUrl = inviteUrl

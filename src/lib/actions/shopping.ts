@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger/logger";
 import { awardShoppingPoints } from "@/lib/actions/gamification";
 
 async function getUserAndHome() {
@@ -47,7 +48,18 @@ export async function createShoppingItem(_: unknown, formData: FormData) {
 }
 
 export async function toggleShoppingItem(id: string, done: boolean) {
-  const { user, admin } = await getUserAndHome();
+  const { user, homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+
+  // Read first to verify ownership and get home_id for points
+  const { data: item } = await admin
+    .from("shopping_items")
+    .select("home_id")
+    .eq("id", id)
+    .eq("home_id", homeId)
+    .single();
+
+  if (!item) return;
 
   await admin
     .from("shopping_items")
@@ -55,15 +67,13 @@ export async function toggleShoppingItem(id: string, done: boolean) {
     .eq("id", id);
 
   if (done) {
-    const { data: item } = await admin
-      .from("shopping_items")
-      .select("home_id")
-      .eq("id", id)
-      .single();
-
-    if (item) {
-      awardShoppingPoints(user.id, item.home_id).catch(() => {});
-    }
+    awardShoppingPoints(user.id, item.home_id).catch((e) =>
+      logger.error("gamification", "awardShoppingPoints failed", {
+        userId: user.id,
+        homeId: item.home_id,
+        error: e,
+      }),
+    );
   }
 
   revalidatePath("/shopping");
@@ -71,8 +81,9 @@ export async function toggleShoppingItem(id: string, done: boolean) {
 }
 
 export async function deleteShoppingItem(id: string) {
-  const { admin } = await getUserAndHome();
-  await admin.from("shopping_items").delete().eq("id", id);
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+  await admin.from("shopping_items").delete().eq("id", id).eq("home_id", homeId);
   revalidatePath("/shopping");
   revalidatePath("/");
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logger } from "@/lib/logger/logger";
 import type { Recurrence } from "@/types";
 import { awardTaskPoints } from "@/lib/actions/gamification";
 
@@ -71,7 +72,18 @@ export async function createTask(_: unknown, formData: FormData) {
 }
 
 export async function toggleTask(id: string, done: boolean) {
-  const { user, admin } = await getUserAndHome();
+  const { user, homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+
+  // Read first to verify ownership and get details needed for recurrence + points
+  const { data: task } = await admin
+    .from("tasks")
+    .select("home_id, title, assigned_to, created_by, due_date, recurrence")
+    .eq("id", id)
+    .eq("home_id", homeId)
+    .single();
+
+  if (!task) return;
 
   await admin
     .from("tasks")
@@ -83,29 +95,27 @@ export async function toggleTask(id: string, done: boolean) {
     .eq("id", id);
 
   if (done) {
-    const { data: task } = await admin
-      .from("tasks")
-      .select("home_id, title, assigned_to, created_by, due_date, recurrence")
-      .eq("id", id)
-      .single();
+    const completedAt = new Date().toISOString();
 
-    if (task) {
-      const completedAt = new Date().toISOString();
+    awardTaskPoints(user.id, task.home_id, task.due_date, completedAt).catch(
+      (e) =>
+        logger.error("gamification", "awardTaskPoints failed", {
+          userId: user.id,
+          homeId: task.home_id,
+          error: e,
+        }),
+    );
 
-      // Award points — fire-and-forget, never block the main flow
-      awardTaskPoints(user.id, task.home_id, task.due_date, completedAt).catch(() => {});
-
-      if (task.recurrence) {
-        await admin.from("tasks").insert({
-          home_id: task.home_id,
-          title: task.title,
-          assigned_to: task.assigned_to,
-          created_by: task.created_by,
-          due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
-          recurrence: task.recurrence,
-          done: false,
-        });
-      }
+    if (task.recurrence) {
+      await admin.from("tasks").insert({
+        home_id: task.home_id,
+        title: task.title,
+        assigned_to: task.assigned_to,
+        created_by: task.created_by,
+        due_date: nextDueDate(task.due_date, task.recurrence as Recurrence),
+        recurrence: task.recurrence,
+        done: false,
+      });
     }
   }
 
@@ -121,7 +131,8 @@ export async function updateTask(
     recurrence?: Recurrence | null;
   },
 ) {
-  const { user, admin } = await getUserAndHome();
+  const { user, homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
 
   const payload: Record<string, unknown> = {};
 
@@ -138,11 +149,14 @@ export async function updateTask(
       .from("tasks")
       .select("assigned_to, original_assigned_to")
       .eq("id", id)
+      .eq("home_id", homeId)
       .single();
+
+    if (!current) return;
 
     payload.assigned_to = updates.assigned_to || null;
 
-    if (current && current.assigned_to !== updates.assigned_to) {
+    if (current.assigned_to !== updates.assigned_to) {
       payload.original_assigned_to =
         current.original_assigned_to ?? current.assigned_to;
       payload.assignee_changed_by = user.id;
@@ -152,14 +166,15 @@ export async function updateTask(
 
   if (Object.keys(payload).length === 0) return;
 
-  await admin.from("tasks").update(payload).eq("id", id);
+  await admin.from("tasks").update(payload).eq("id", id).eq("home_id", homeId);
   revalidatePath("/tasks");
   revalidatePath("/");
 }
 
 export async function deleteTask(id: string) {
-  const { admin } = await getUserAndHome();
-  await admin.from("tasks").delete().eq("id", id);
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+  await admin.from("tasks").delete().eq("id", id).eq("home_id", homeId);
   revalidatePath("/tasks");
   revalidatePath("/");
 }

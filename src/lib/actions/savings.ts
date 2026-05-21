@@ -50,17 +50,25 @@ export async function createSavingGoal(_: unknown, formData: FormData) {
 }
 
 export async function addToSavingGoal(id: string, additionalAmount: number) {
-  const { admin } = await getUserAndHome();
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
 
+  // home_id filter verifies ownership and prevents exceeding target (KI-013)
   const { data: goal } = await admin
     .from("saving_goals")
-    .select("current_amount")
+    .select("current_amount, target_amount")
     .eq("id", id)
+    .eq("home_id", homeId)
     .single();
 
   if (!goal) return;
 
-  const newAmount = Number(goal.current_amount) + additionalAmount;
+  // Cap at target_amount to prevent inconsistent data (fixes KI-013)
+  const newAmount = Math.min(
+    Number(goal.current_amount) + additionalAmount,
+    Number(goal.target_amount),
+  );
+
   await admin
     .from("saving_goals")
     .update({ current_amount: newAmount, updated_at: new Date().toISOString() })
@@ -74,18 +82,23 @@ export async function updateSavingGoal(
   id: string,
   updates: { name?: string; target_amount?: number; deadline?: string | null },
 ) {
-  const { admin } = await getUserAndHome();
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+
   await admin
     .from("saving_goals")
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("home_id", homeId);
+
   revalidatePath("/finance");
   revalidatePath("/finance/savings");
 }
 
 export async function deleteSavingGoal(id: string) {
-  const { admin } = await getUserAndHome();
-  await admin.from("saving_goals").delete().eq("id", id);
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+  await admin.from("saving_goals").delete().eq("id", id).eq("home_id", homeId);
   revalidatePath("/finance");
   revalidatePath("/finance/savings");
 }

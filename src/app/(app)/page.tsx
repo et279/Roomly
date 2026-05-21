@@ -37,16 +37,38 @@ export default async function DashboardPage() {
 
   const memberIds = (memberRows ?? []).map((m) => m.user_id);
 
+  const n = new Date();
+  const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+
+  // Split queries: COUNT for metrics, limit(5) for display — avoids loading all tasks (fixes KI-011)
   const [
-    { data: tasks },
+    { data: pendingTasksRaw },
+    { count: tasksDoneCount },
+    { count: tasksPendingCount },
     { data: memberProfiles },
     { data: shoppingItems },
   ] = await Promise.all([
     admin
       .from("tasks")
-      .select("id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at")
+      .select(
+        "id, title, done, assigned_to, created_by, created_at, home_id, completed_by, completed_at, due_date, original_assigned_to, assignee_changed_by, assignee_changed_at",
+      )
       .eq("home_id", homeId)
-      .order("created_at", { ascending: false }),
+      .eq("done", false)
+      .or(`due_date.is.null,due_date.lte.${todayStr}`)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    admin
+      .from("tasks")
+      .select("*", { count: "exact", head: true })
+      .eq("home_id", homeId)
+      .eq("done", true),
+    admin
+      .from("tasks")
+      .select("*", { count: "exact", head: true })
+      .eq("home_id", homeId)
+      .eq("done", false)
+      .or(`due_date.is.null,due_date.lte.${todayStr}`),
     admin.from("profiles").select("id, name").in("id", memberIds),
     admin
       .from("shopping_items")
@@ -54,52 +76,49 @@ export default async function DashboardPage() {
       .eq("home_id", homeId),
   ]);
 
-  // Exclude tasks with a future due_date (e.g. auto-created next occurrences of recurring tasks)
-  const n = new Date();
-  const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  const pendingTasks = (pendingTasksRaw ?? []).map((t) => ({
+    ...t,
+    completed_by: t.completed_by ?? null,
+    completed_at: t.completed_at ?? null,
+    due_date: t.due_date ?? null,
+    original_assigned_to: t.original_assigned_to ?? null,
+    assignee_changed_by: t.assignee_changed_by ?? null,
+    assignee_changed_at: t.assignee_changed_at ?? null,
+    profiles: t.assigned_to
+      ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
+      : null,
+    completed_by_profile: null,
+  }));
 
-  const pendingTasks = (tasks ?? [])
-    .filter((t) => !t.done && (!t.due_date || t.due_date <= todayStr))
-    .slice(0, 5)
-    .map((t) => ({
-      ...t,
-      completed_by: t.completed_by ?? null,
-      completed_at: t.completed_at ?? null,
-      due_date: t.due_date ?? null,
-      original_assigned_to: t.original_assigned_to ?? null,
-      assignee_changed_by: t.assignee_changed_by ?? null,
-      assignee_changed_at: t.assignee_changed_at ?? null,
-      profiles: t.assigned_to
-        ? ((memberProfiles ?? []).find((p) => p.id === t.assigned_to) ?? null)
-        : null,
-      completed_by_profile: null,
-    }));
-
-  const tasksDoneCount = (tasks ?? []).filter((t) => t.done).length;
-  const tasksPendingCount = (tasks ?? [])
-    .filter((t) => !t.done && (!t.due_date || t.due_date <= todayStr)).length;
   const shoppingPendingCount = (shoppingItems ?? []).filter((i) => !i.done).length;
 
-  // Member leaderboard: tasks done per member
-  const memberStats: MemberStat[] = (memberProfiles ?? []).map((p) => {
-    const memberTasks = (tasks ?? []).filter(
-      (t) => t.completed_by === p.id || t.assigned_to === p.id
-    );
-    return {
-      user_id: p.id,
-      name: p.name,
-      pending: memberTasks.filter((t) => !t.done).length,
-      done: (tasks ?? []).filter((t) => t.completed_by === p.id).length,
-    };
-  });
+  // Per-member stats via COUNT queries — accurate without loading all task rows
+  const memberStats: MemberStat[] = await Promise.all(
+    (memberProfiles ?? []).map(async (p) => {
+      const [{ count: pending }, { count: done }] = await Promise.all([
+        admin
+          .from("tasks")
+          .select("*", { count: "exact", head: true })
+          .eq("home_id", homeId)
+          .eq("assigned_to", p.id)
+          .eq("done", false),
+        admin
+          .from("tasks")
+          .select("*", { count: "exact", head: true })
+          .eq("home_id", homeId)
+          .eq("completed_by", p.id),
+      ]);
+      return { user_id: p.id, name: p.name, pending: pending ?? 0, done: done ?? 0 };
+    }),
+  );
 
   return (
     <DashboardContent
       userName={profile?.name ?? ""}
       homeName={homeName}
       pendingTasks={pendingTasks as TaskWithAssignee[]}
-      tasksDoneCount={tasksDoneCount}
-      tasksPendingCount={tasksPendingCount}
+      tasksDoneCount={tasksDoneCount ?? 0}
+      tasksPendingCount={tasksPendingCount ?? 0}
       shoppingPendingCount={shoppingPendingCount}
       memberStats={memberStats}
       isAdmin={isAdmin}

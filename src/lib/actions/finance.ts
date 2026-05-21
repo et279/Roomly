@@ -64,18 +64,30 @@ export async function updateFinancialRecord(
     date?: string;
   },
 ) {
-  const { admin } = await getUserAndHome();
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+
+  // home_id filter ensures only records from this user's home are updated
   await admin
     .from("financial_records")
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("home_id", homeId);
+
   revalidatePath("/finance");
   revalidatePath("/finance/records");
 }
 
 export async function deleteFinancialRecord(id: string) {
-  const { admin } = await getUserAndHome();
-  await admin.from("financial_records").delete().eq("id", id);
+  const { homeId, admin } = await getUserAndHome();
+  if (!homeId) return;
+
+  await admin
+    .from("financial_records")
+    .delete()
+    .eq("id", id)
+    .eq("home_id", homeId);
+
   revalidatePath("/finance");
   revalidatePath("/finance/records");
 }
