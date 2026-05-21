@@ -56,7 +56,7 @@ export default async function RolesPage() {
     }));
   } else {
     members = (memberRows ?? []).map((m) => {
-      const roleData = m.roles as { id: string; name: string } | null;
+      const roleData = m.roles as unknown as { id: string; name: string } | null;
       return {
         id: m.id as string,
         user_id: m.user_id as string,
