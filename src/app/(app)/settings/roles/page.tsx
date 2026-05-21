@@ -72,7 +72,7 @@ export default async function RolesPage() {
     id: r.id,
     name: r.name,
     description: r.description,
-    permissions: (r.role_permissions as Array<{ permissions: { key: string } | null }>)
+    permissions: (r.role_permissions as unknown as Array<{ permissions: { key: string } | null }>)
       .map((rp) => rp.permissions?.key)
       .filter((k): k is string => Boolean(k)),
   }));
